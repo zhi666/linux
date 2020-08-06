@@ -1,0 +1,101 @@
+编译环境
+yum install git gcc gcc-c++ make automake autoconf libtool pcre pcre-devel zlib zlib-devel openssl-devel wget vim -y
+
+磁盘目录
+所安装的包   /usr/local/src 目录下
+数据存储位置  /home/dfs    位置可随意
+
+mkdir /home/dfs   #创建数据存储目录
+cd /usr/local/src  #却换到安装目录准备下载安装包
+
+安装libfatscommon
+git clone https://github.com/happyfish100/libfastcommon.git --depth 1
+cd libfastcommon
+./make.sh && ./make.sh install  #编译安装
+
+安装FastDFS
+cd ../ #返回上级目录  在/usr/local/src
+git clone https://github.com/happyfish100/fastdfs.git --depth 1
+cd fastdfs
+./make.sh && ./make.sh install  #编译安装
+#配置文件准备
+cp /etc/fdfs/tracker.conf.sample /etc/fdfs/tracker.conf
+cp /etc/fdfs/storage.conf.sample /etc/fdfs/storage.conf
+
+cp /etc/fdfs/client.conf.sample /etc/fdfs/client.conf # 客户端文件，测试用
+cp /usr/local/src/fastdfs/conf/http.conf /etc/fdfs/   # 仅供nginx的访问使用
+cp /usr/local/src/fastdfs/conf/mime.types /etc/fdfs/  # 仅供nginx的访问使用
+
+安装fastdfs-nginx的模块
+cd ../ #返回上一级目录  在/usr/local/src
+git clone https://github.com/happyfish100/fastdfs-nginx-module.git --depth 1
+cp /usr/local/src/fastdfs-nginx-module/src/mod_fastdfs.conf /etc/fdfs
+
+安装nginx的
+wget http://nginx.org/download/nginx-1.15.4.tar.gz     #下载nginx的压缩包
+tar -zxvf nginx-1.15.4.tar.gz  #解压
+cd nginx-1.15.4/
+# 添加fastdfs-nginx的模块
+./configure --add-module=/usr/local/src/fastdfs-nginx-module/src/
+
+make && make install  #编译安装
+
+========================================================================
+单机部署
+
+跟踪配置
+# 服务器的IP为192.168.51.1
+# 我建议用FTP下载来这些文件本地修改
+vim /etc/fdfs/tracker.conf
+#需要修改的内容如下
+port = 22122 # tracker服务器端口 （默认22122，一般不修改）
+base_path = /home/dfs #存储日志和数据的根目录
+
+存储配置
+vim /etc/fdfs/storage.conf
+#需要修改的内容如下
+port = 23000 #存储服务器端口 （默认23000.一般不修改）
+base_path = /home/dfs  #数据和日志文件存储根目录
+store_path0 =/home/dfs #第一个存储目录
+tracker_server =192.168.51.1:22111 #跟踪服务器IP和端口
+http.server_port =8888 #HTTP访问文件的端口 （默认8888，看情况修改，和nginx的中保持一致）
+
+客户端测试
+vim /etc/fdfs/client.conf
+#需要修改的内容如下
+base_path = /home/dfs
+tracker_server =192.168.51.1:22122 #跟踪服务器IP和端口
+
+fdfs_trackerd /etc/fdfs/tracker.conf start  #启动跟踪服务器
+fdfs_storaged /etc/fdfs/storage.conf start  #启动存储服务器
+#保存后测试，返回ID表示成功如：组1 / M00 / 00/00 / xx.tar.gz 
+fastdfs_upload_file /etc/fdfs/client.conf /usr/local/src/nginx-1.15.4.tar.gz
+
+配置nginx的访问
+vim /etc/fdfs/mod_fastdfs.conf
+#需要修改的内容如下
+tracker_server = 192.168.52.1:22122 #跟踪服务器IP和端口
+url_have_group_name = true   #true 真 / false 假
+store_path0= /home/dfs
+#配置nginx.config
+vim /usr/local/nginx/conf/nginx.conf
+#添加如下配置
+			server {
+				listen	8888;      # 该端口为storage.conf中http.server_port相同
+				server_name localhost;
+				
+				location ~ /group[0-9]/{
+					ngx_fastdfs_module;
+				}
+				error_page 500 502 503 504 /50x.html;
+				location = /50x.html;
+				root html;
+				}
+			}
+ln -s /usr/local/nginx/sbin/* /usr/local/sbin/ #制作nginx的软链接
+nginx -t  #检查nginx配置文件是否有误
+nginx   #启动nginx
+#测试下载，用外部浏览器访问刚才以传过的nginx的安装包，引用返回的ID
+http://192.168.52.1:8888/group1/M00/00/00/wKgAQ1pysxmAaqhAAA76tz-dVgg.tar.gz
+#弹出下载单机部署全部通过
+

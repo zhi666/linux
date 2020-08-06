@@ -1,0 +1,68 @@
+////app服务器===================================================================
+原镜像市场镜像：OneinStack
+镜像使用文档：http://47.75.157.80
+IP：47.75.157.80
+内网：172.31.35.10
+root 	123qaz!@#
+
+---数据库
+root: 123.Shui!.shui123
+seeyouadmin@127.0.0.1:123.Shui!.shui123      	(本地使用)
+seeyouadmin@172.31.160.16:123.Shui!.shui123		（供web端连接）
+
+-----SeeYou程序、日志、用户文件-----------------------
+SeeYou-App服务端程序 部署路径：/data/wwwroot/default/RainbowChatServer/
+SeeYou-App服务端运行日志路径：/home/www/log/
+SeeYou-App服务端 用户上传文件所在路径：/home/www/seeyou_app_user_files/
+
+---------Tomcat
+Tomcat安装路径：/usr/local/tomcat/
+tomcat启动/停止/重启 ：	service tomcat start/stop/restart
+tomcat查看SeeYou运行日志： tail -f /usr/local/tomcat/logs/catalina.out
+https://download.seeyou.icu:8443/RainbowChatServer/   seeyou下载
+
+更新奢友apk修改版本号，
+find / -name apk_version.properties
+vim  /data/wwwroot/default/RainbowChatServer/WEB-INF/classes/apk_version.properties
+不用重启
+
+///////web端服务器==================================================================
+原镜像：由Websoft9提供的RabbitMQ环境，原镜像组件：RabbitMQ3.7.8,Erlang20.0,OpenSSL
+47.52.192.133
+内网 172.31.160.16
+root 	123qaz!@#
+
+---rabbitmq
+管理地址：http://47.52.192.133:15672/
+admin:123.shui
+seeyouadmin:123.shui
+
+RBChat-Web前、后端部署路径：/home/webim/
+RBChat-MQ-Server部署路径：/home/mqserver/
+
+---RBChat-web相关命令
+启动：pm2 start /home/webim/bin/www.js
+停止：pm2 stop www
+重启：pm2 restart www
+查看日志：pm2 logs www
+
+---RBChat-mq-server启动
+cd /home/mqserver
+nohup ./run.sh &
+
+
+web服务器重启后需依次执行以下3条命令即可，切勿重复执行：
+pm2 start /home/webim/bin/www.js
+cd /home/mqserver
+nohup ./run.sh &
+
+注意：根据服务器活动程度，需定期清理rabbitmq日志，
+根据以往经验，1万用户需每隔1月清理一次，10万用户需2-3天清理一次，
+否则日志文件会占满整个磁盘空间rabbitmq无法正常工作。
+清理方法：执行这一句命令即可
+echo " " >/root/.pm2/logs/www-out.log
+
+
+
+
+
