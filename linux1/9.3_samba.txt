@@ -1,0 +1,86 @@
+一. samba
+    SMB（Server Messages Block，信息服务块)
+    samba是DEC开始开发的,用于在不同的Unix机器间进行资源共享,采用udp协议。
+    后来基于tcp重新开发后,效率有了很大提高。它使用的协议是SMB。
+    微软不愿意交License费,在windows系统中对该协议重新进行了实现。
+    既然samba和windows中的网络邻居都使用SMB协议。
+    那么,samba自然主要用于在windows和unix之间共享资源。资源包括文件、打印机等等。
+
+    NFS是SUN开发的,用于UNIX机器之间的资源共享。
+    其设置相当容易,主要是配置/etc/exports文件,然后运行exportfs -arv来共享出来。
+    现在NFS已经成为UNIX/LINUX上的标配。
+    两者的文档都说自己的效率高一些. 从我的经验来看,nfs的效率要稍微高一些,只是差别不是太大。
+    从配置来看,samba比较复杂,nfs比较简单。但是复杂有复杂的道理,它让我们能够灵活的配置
+
+
+二. 使用
+    1. 安装
+        sudo yum install samba samba-common -y
+        sudo yum install samba-client -y
+    Samba 完整的详细的文档，可参考man 文档 smb.conf(5)
+
+    2. 配置文件
+        sudo vim /etc/samba/smb.conf
+
+        配置文件解析
+
+        [global]                                    <-- 表示这是影响全局的配置
+            workgroup = MYGROUP
+            server string = Samba Server Version %v
+            log file = /var/log/samba/log.%m
+            max log size = 50
+            security = user            <-- 非常重要的参数，user 代表客户端必须提供用户名和密码（匿名除外）
+                                           值是share的话, 就不需要密码, 是下面的配置要进行相应的改变
+            assdb backend = tdbsam
+            load printers = yes
+            cups options = raw
+
+        [software]
+            comment         = Shared software       <-- 自定义描述
+            path            = /external/software    <-- 共享目录
+            guest ok        = yes                   <-- 是否允许匿名访问
+            browseable      = yes                   <-- 是否出现在查询列表中
+            writeable       = no                    <-- 是否可写
+
+        [upload]
+            comment              = Upload
+            path                 = /opt/upload
+            guest ok             = no
+            browseable           = yes
+            writeable            = yes
+            valid users          = u1,u2,+g1             <-- 允许访问的用户和组
+            write list           = u1                    <-- 读写列表
+            read list            = u2,+g1                <-- 只读列表
+            create mode          = 0344                  <-- 控制新建的文件的权限
+            force create mode    = 0344                  <-- 控制新建的文件的权限
+            directory mode       = 0777                  <-- 控制新建的目录的权限
+            force directory mode = 0777                  <-- 控制新建的目录的权限
+            hosts deny           = all                   <-- 禁止访问的客户端
+            hosts allow          = 192.168.0.0/24 except 192.168.0.222   <-- 允许访问的客户端
+
+    PPP1
+
+
+    3. 挂载samba的共享目录
+        用匿名用户挂载
+            sudo mount //192.168.0.183/software /mnt -o guest
+        指定用户名
+            sudo mount //192.168.0.183/software /mnt -o username=u1
+
+
+    4. Samba 的用户管理：(PPP2)
+
+        samba对用户有两个要求：
+        1. 必须是服务器的系统用户
+        2. 必须用smbpasswd 把该用户添加到samba的用户数据库中
+
+        用户管理命令
+        sudo smbpasswd -a u1         <-- 添加用户, add
+        sudo smbpasswd u1            <-- 修改samba 用户 u1 的密码
+        sudo smbpasswd -x u1         <-- 删除用户
+        sudo smbpasswd -d u1         <-- 禁用用户, disable
+        sudo smbpasswd -e u1         <-- 启用用户, enable
+        sudo pdbedit -L              <-- 列出所有用户, List
+        sudo pdbedit -Lv             <-- 列出所有用户的详细信息, verbose
+        sudo pdbedit -Lv u1          <-- 列出用户 u1 的详细信息
+

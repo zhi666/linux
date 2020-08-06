@@ -1,0 +1,137 @@
+一. httpd是什么
+    httpd是一个开源软件，且一般用作web服务器来使用。目前最流行的web服务器软件叫做httpd，
+    在早期的http server就叫做apache，到了http server 2.0以后就改名为httpd了。
+    所以有时候听到apache服务器和httpd服务器其实都是指得是一个意思。
+
+二. httpd的安装及设置
+
+    1. 安装httpd服务器
+        sudo yum install httpd httpd-tools httpd-manual -y
+
+    2. 对配置文件做语法检查
+        httpd -t
+
+    3. 查看版本
+        httpd -V
+
+    4. 修改模式
+       编辑文件/etc/httpd/conf.modules.d/00-mpm.conf，根据需要启用相应的行
+
+        LoadModule mpm_prefork_module modules/mod_mpm_prefork.so
+        # LoadModule mpm_worker_module modules/mod_mpm_worker.so
+        #LoadModule mpm_event_module modules/mod_mpm_event.so
+
+    5. 查看80端口是否有监听
+         netstat -ntlp
+
+    6. 配置文件
+        1). 主配置文件
+            /etc/httpd/conf/httpd.conf
+        2). 其他配置文件
+            /etc/httpd/conf.d/的所有配置文件
+    7. 设置局域网网页和共享
+        PPP1
+        PPP2
+
+    #注意，这些配置有些在虚拟主机下不能生效，应该在真实主机上运行
+
+    apache 常用设置指令
+
+    ServerRoot "/etc/httpd"
+    PidFile run/httpd.pid
+    Timeout 60
+    KeepAlive On
+    MaxKeepAliveRequests 100
+    KeepAliveTimeout 15
+    Listen 80
+    #Listen 12.34.56.78:80
+    Include conf.d/*.conf           <-- 把 $ServerRoot/conf.d/下面所有的.conf文件都包含进来
+    User apache                     <-- httpd进程的用户身份
+    Group apache                    <-- httpd进程的组身份
+    ServerAdmin root@localhost      <-- 管理员邮箱
+    DocumentRoot "/var/www/html"    <-- 网站根目录
+    DirectoryIndex index.html       <-- 设置默认主页文件
+    AccessFileName .htaccess        <-- 访问控制文件的名字
+    ErrorLog logs/error_log         <-- 错误日志的存放位置
+    LogLevel warn                   <-- 日志等级
+
+
+    访问控制:(PPP3)
+    Order allow,deny
+    Allow from all
+
+    allow 和 deny 如何结合？
+    类似于层叠样式表 css.
+
+    指令的容器：
+    Directory: 针对文件系统上的一个目录
+    Files: 针对指定的文件，可以是全局的，也可以是在某个Directory下
+    Location: 针对网址的控制
+
+
+三. 对目录的访问进行密码控制(PPP4)
+    1. 创建访问控制文件
+    需要控制哪个目录及其子目录，就在Directory 指令里指定哪个目录
+    <Directory "/var/www/html/secret">
+        authname "Authenticate yourself"
+        authtype basic          #基于Basic认证
+        authuserfile /etc/httpd/userpasswd  #指定账号文件
+        require valid-user   #指定允许登录的用户，valid-user表示账号文件内的所有用户
+    </Directory>
+
+    2. 创建账户文件
+    htpasswd -c /etc/httpd/userpasswd  u1  <-- 创建该文件并添加用户u1
+    htpasswd /etc/httpd/userpasswd  u2     <-- 添加用户u2
+
+    3. 重启httpd服务
+
+    如果一个目录使用密码控制访问，那么在通过网页浏览器列出该目录的父目录时，看不到该目录，也就是说，该目录被隐藏了。但是可以通过直接输入url来访问。
+
+四. 基于域名的虚拟主机(PPP5)
+    /* NameVirtualHost *:80 */
+    <VirtualHost *:80>
+        DocumentRoot /etc
+        ServerName etc.lab.net
+        <Location />
+            options Indexes
+            order deny,allow
+            allow from all
+        </Location>
+    </VirtualHost>
+
+    别名：把URL映射到文件系统路径
+    Alias URL-path file-path|directory-path
+
+    例子：把系统上面的目录/external/software 映射到URL http://192.168.0.183/software
+    Alias /software /external/software
+    <Directory "/external/software">
+        Options Indexes
+        Require all granted
+    </Directory>
+
+五. 配置https
+
+    1. 安装模块和工具
+        sudo yum install mod_ssl openssl -y
+
+    2. 写配置
+        vi /etc/httpd/conf.d/ssl.conf
+
+        以下配置项用于指定私钥和证书（公钥）
+        SSLCertificateFile /etc/pki/tls/certs/localhost.crt
+        SSLCertificateKeyFile /etc/pki/tls/private/localhost.key
+
+    3. 预备证书和key
+         openssl genrsa -out ca.key 2048
+         openssl req -new -key ca.key -out ca.csr
+         openssl x509 -req -days 365 -in ca.csr -signkey ca.key -out ca.crt
+
+    4. 将ca.crt移动并重命名为/etc/pki/tls/certs/localhost.crt，
+         ca.key移动并重命名为/etc/pki/tls/private/localhost.key
+
+    5. https的端口为443，应在httpd.conf里，将该网站监听的端口改为443
+
+    6. 重启服务
+        sudo systemctl restart httpd
+
+

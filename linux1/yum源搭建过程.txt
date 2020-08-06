@@ -1,0 +1,22 @@
+将iso文件挂载到虚拟机,过程省略
+
+创建本地yum源仓库目录
+# mkdir /yum
+
+将光驱挂载到yum仓库目录
+# mount /dev/sr0 /yum
+
+创建配置文件
+# vim /etc/yum.repos.d/local.repo		--必须以repo结尾
+[local]		--yum仓库名称,自定义
+name=local_yum	--也是一个名称,自定义
+baseurl=file:///yum		--yum源仓库路径,一定要写你对应的目录
+enable=1		--是否开启此仓库,0=不开启；1=开启
+gpgcheck=0		--是否跳过MD5验证,0=不开启；1=开启
+
+配置完成，清理并重新加载缓存
+# yum clean all 
+# yum makecache	
+
+完事，可以安装软件包了
+# yum install -y 安装包名称

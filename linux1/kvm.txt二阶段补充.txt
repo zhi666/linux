@@ -1,0 +1,754 @@
+--
+
+
+虚拟化－》云计算－－》容器（devops)
+
+xen   kvm    vmware	 esx       openVZ	     Oracle VM VirtualBox    vsphere等
+
+
+rhel5  xen
+rhel6  kvm
+rhel7  kvm
+
+
+	半(准)虚拟化：
+		客户机器操作系统内核必须是修改过的，才能使用半虚拟化。
+		硬件虚拟化技术。
+
+		典型代表： Xen 
+
+
+	全虚拟化：
+		必须cpu支持硬件虚拟化。
+		客户机器不需要修改内核，原则上可以安装任何的操作系统。
+			Intel # cat /proc/cpuinfo | grep vmx
+			AMD : # cat /proc/cpuinfo | grep svm
+
+		典型代表： kvm , VMware
+
+
+
+=====================================================================================
+
+
+
+
+准备工作
+1,# cat /etc/redhat-release 
+CentOS Linux release 7.3.1611 (Core)	--确认你系统的版本
+
+在宿主机准备好yum（只需要本地镜像yum就可以了,不要加公网的centos源和epel源，有可能安装的软件太新，会造成兼容性问题) TODO
+
+
+
+2,
+# cat /proc/cpuinfo |grep -E "vmx|svm"	--查看CPU是否支持intel或AMD的虚拟技术(BIOS或EFI打开inter VT技术)
+
+
+
+在宿主机上安装kvm
+
+# yum install qemu-kvm libvirt virt-install libvirt-python virt-manager libvirt-client virt-viewer -y
+
+
+# systemctl restart libvirtd
+# systemctl enable libvirtd
+# systemctl status libvirtd
+
+
+# lsmod |grep kvm		--确认是否有装载kvm模块，没有装载的可以使用modprobe kvm来装载
+kvm_intel             170181  0 
+kvm                   554609  1 kvm_intel
+irqbypass              13503  1 kvm
+
+
+
+开始安装kvm
+1，图形安装
+
+# virt-manager    --和xen一样的命令，打开虚拟机管理器
+
+
+第一步：
+安装方式:      --我这里选择第一个，使用iso直接安装
+
+第二步:
+安装路径：/data/CentOS-7-x86_64-DVD-1611.iso	--写上iso在宿主机上的路径
+
+第三步:
+内存大小: 800M		-- 内存如果较小，安装时无法使用图形安装方式，只能使用文本安装方式
+cpu个数:2     --不能大于宿主机器的cpu核数
+
+第四步:
+硬盘大小: 20 G    --我这里定义20G大小；它的默认路径会在/var/lib/libvirt/images/kvm1.qcow2
+
+
+第五步:
+name : kvm1    --自定义一个虚拟机名称
+网络现在只能选择default  --这是一个nat网络(私有网络)，桥接网络不能选，需要后面单独配置后才能选择
+
+
+
+2，直接使用命令行来安装
+# virt-install  --name "kvm1" --memory 800 --vcpus 2  --disk=/var/lib/libvirt/images/kvm1.qcow2,size=20 -l /data/CentOS-7-x86_64-DVD-1611.iso --network bridge=virbr0
+
+
+
+===================================================================================
+
+
+
+主要的管理命令:
+virsh help  
+virsh help domain
+virsh help network
+virsh help monitor   --因为参数很多，可以用象domain,network,monitor这种关键字，只查看与关键字有关的参数帮助
+......
+
+
+
+
+# virsh  list			--列出当前宿主机上有哪些正在运行的kvm虚拟机
+ Id    Name                           State
+----------------------------------------------------
+ 1     kvm1                           running
+
+# virsh list --all		--列出当前宿主机上有哪些kvm虚拟机（包括任何状态)
+ Id    Name                           State
+----------------------------------------------------
+ 1     kvm1                           running
+ -     kvm2                           shut off
+
+
+启动，关闭，重启相关基本操作
+# virsh  start kvm1	  --启动一个虚拟机
+# virsh  shutdown kvm1    --正常关闭一个虚拟机(把服务都停掉，再关电源)
+# virsh  reboot kvm1      --正常重启一个虚拟机,先shutdown再start
+
+# virsh  destroy kvm1     --强制关闭一个虚拟机,类似断电,可以瞬间关闭虚拟机 	
+# virsh  reset kvm1	  	--相当于是先destroy,再start
+
+
+保存，暂停相关基本操作
+# virsh save kvm1 /etc/libvirt/qemu/kvm1.save	  --把kvm1关闭，并把当前状态保存为一个文件(此文件路径和名字自定义)	
+# virsh restore /etc/libvirt/qemu/kvm1.save	--通过保存的文件，恢复当时save时的状态
+
+# virsh suspend kvm1	--暂停kvm1的状态
+# virsh resume kvm1	--由暂停切换为继续的状态
+
+
+
+
+连接虚拟机(domain)相关操作
+方法一:
+# virt-manager 打开管理器，双击你要连接的虚拟机
+
+方法二;
+# virt-viewer  kvm1   --连接一个已经启动的虚拟机，并使用图形查看
+
+方法三:
+# ssh x.x.x.x   --非图形方式就可以连，但需要虚拟机配置好ip
+
+
+
+方法四:
+非图形方式也可以使用console连（此方法不需要虚拟机配置ip都可以连)，但需要配置授权
+＃ virsh console kvm1   --字符连接一个虚拟机,但是现在连接不了；因为需要一个串口的授权才可以;
+
+
+授权做法:
+1,在kvm1虚拟机里操作（注意不是在宿主机上操作)
+
+# grubby --update-kernel=ALL --args="console=ttyS0"
+# reboot
+
+2,在宿主机virsh console kvm1连接使用 
+
+3,退出的方式
+exit只是退出登录的用户而已
+要完全退出这个console连接,需要使用的是ctrl+ ] (也就是右中框号的这个键）
+
+
+
+
+=====================================================================================
+
+
+虚拟机相关的文件：
+以kvm1为例:
+配置文件在:/etc/libvirt/qemu/kvm1.xml
+磁盘文件默认在:/var/lib/libvirt/images/kvm1.qcow2
+
+
+打开虚拟机配置文件的做法:
+方法一:
+# vim /etc/libvirt/qemu/kvm1.xml
+方法二:
+# virsh edit kvm1  
+
+
+
+命令删除一个虚拟机的做法(假设为kvm3)
+# virsh destroy kvm3
+# virsh undefine kvm3 （磁盘文件需要手动删除）
+# rm -rf /var/lib/libvirt/images/kvm3.qcow2
+
+
+=====================================================================================
+
+
+
+kvm 的克隆
+
+--注意：克隆都需要源虚拟机器是关闭或暂停状态
+
+
+例一:图形克隆
+1,先关闭kvm1或 virsh suspend kvm1暂停kvm1（使用virsh resume kvm1恢复）
+
+
+2,
+英文版系统：
+virt-manager－－》右键点kvm1－－》选择clone－－>修改克隆后的名字或其它参数－－》点clone
+
+中文版系统：
+virt-manager－－》右键点kvm1－－》选择 克隆 －－>修改克隆后的名字或其它参数－－》点 克隆
+
+例二:命令克隆
+
+# virt-clone -o kvm1 -n kvm11 -f /var/lib/libvirt/images/kvm11.qcow2 
+Allocating kvm4.qcow2  7% [-          ]  34 MB/s | 957 MB     05:29 ETA
+--把kvm1克隆成kvm11，指定磁盘路径为/var/lib/libvirt/images/kvm11.qcow2;如果kvm1有多个硬盘,那么克隆时也要对应的克隆成多个路径
+
+
+
+例三:文本命令手动克隆
+1，拷贝配置文件和磁盘文件
+# cp /etc/libvirt/qemu/kvm1.xml /etc/libvirt/qemu/kvm3.xml
+# cp /var/lib/libvirt/images/kvm1.qcow2 /var/lib/libvirt/images/kvm3.qcow2
+
+
+2，修改拷贝的配置文件
+# vim /etc/libvirt/qemu/kvm3.xml 
+
+
+<domain type='kvm'>
+  <name>kvm3</name>		--名字改成kvm3
+  <uuid>811d69e8-b1d8-cfbf-684a-69f2e0af6b88</uuid>	--uuid随便改几个数字
+  <memory unit='KiB'>1048576</memory>
+  <currentMemory unit='KiB'>1048576</currentMemory>
+  <vcpu placement='static'>2</vcpu>
+  <os>
+    <type arch='x86_64' machine='pc-i440fx-rhel7.0.0'>hvm</type>
+    <boot dev='hd'/>
+  </os>
+  <features>
+    <acpi/>
+    <apic/>
+    <pae/>
+  </features>
+  <clock offset='utc'/>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>restart</on_crash>
+  <devices>
+    <emulator>/usr/libexec/qemu-kvm</emulator>
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='raw' cache='none'/>
+      <source file='/var/lib/libvirt/images/kvm3.qcow2'/>   --磁盘路径改成kvm3.qcow2的路径
+      <target dev='vda' bus='virtio'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x05' function='0x0'/>
+    </disk>
+    <disk type='block' device='cdrom'>
+      <driver name='qemu' type='raw'/>
+      <target dev='hdc' bus='ide'/>
+      <readonly/>
+      <address type='drive' controller='0' bus='1' target='0' unit='0'/>
+    </disk>
+    <controller type='usb' index='0'>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x01' function='0x2'/>
+    </controller>
+    <controller type='ide' index='0'>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x01' function='0x1'/>
+    </controller>
+    <interface type='bridge'>
+      <mac address='52:54:00:5c:3a:2d'/>   --网卡地址随便改下，只改后三位
+      <source bridge='br0'/>
+      <model type='virtio'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x03' function='0x0'/>
+    </interface>
+    <serial type='pty'>
+      <target port='0'/>
+    </serial>
+    <console type='pty'>
+      <target type='serial' port='0'/>
+    </console>
+    <input type='tablet' bus='usb'/>
+    <input type='mouse' bus='ps2'/>
+    <graphics type='vnc' port='-1' autoport='yes'/>
+    <sound model='ich6'>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x04' function='0x0'/>
+    </sound>
+    <video>
+      <model type='cirrus' vram='9216' heads='1'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x02' function='0x0'/>
+    </video>
+    <memballoon model='virtio'>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x06' function='0x0'/>
+    </memballoon>
+  </devices>
+</domain>
+
+
+
+3，保存后，使用virsh list --all查看不到的，需要define一下
+# virsh define /etc/libvirt/qemu/kvm3.xml
+
+# virsh list --all		--再查就可以查看到kvm3
+ Id    Name                           State
+----------------------------------------------------
+ -     kvm1                           shut off
+ -     kvm1-clone                     shut off
+ -     kvm2                           shut off
+ -     kvm3                           shut off
+
+4,再启动
+# virsh start kvm3   --可以启动克隆的机器了
+
+
+
+===================================================================================
+
+
+
+kvm 网络管理
+
+(网络简单划分为：桥接和私有网络)
+
+
+# virsh  help network	--只查看与网络有关的帮助参数
+
+
+# virsh net-list --all
+Name                 State      Autostart
+-----------------------------------------
+default              active     yes 	--这是一个NAT网络，私有网络
+
+
+# virsh net-info default
+Name            default
+UUID            704eb1b7-3feb-4a38-8642-9c3fe2f023bb
+Active:         yes
+Persistent:     yes
+Autostart:      yes
+Bridge:         virbr0
+
+--是一个名为default，类型为nat(私有网络)，并且连接的宿主机网卡为virbr0的网络
+
+
+default网段的配置文件的路径为:
+/etc/libvirt/qemu/networks/default.xml
+
+
+virsh net-destroy default		--停掉default网络，由virsh net-list --all去查看，状态变为inactive
+virsh net-start  default		--启动default网络，状态变为active
+
+
+===================================================================================
+
+
+星形网络:
+
+		PC1		   PC2
+
+
+			交换机(vmnet0,vmnet1,vmnet8,default,default1...)
+
+
+		PC3		  PC4
+
+网络大概分两种:
+桥接:	和宿主机的物理网卡在同一个物理交换机上
+私有网络:  私自虚拟的网络，不和宿主机在同一个物理交换机上
+
+
+
+
+例四:图形增加私有网络
+
+英语版系统：
+virt-manager打开图形－－》edit －－》connections details －－》 virtual networks－－》点左下角的+号增加一个私有网络（选择名字，网络分配地址范围，dhcp的分配范围）
+--注意：这里最后一步有三种网络(注意:下面三种网络都为私有网络)：
+1，isolated 相当vmware的hostonly，没有NAT，也没有网关(完全和vmware的hostonly类型一样)
+2，NAT   有网关，有NAT，可以通过宿主上外网(和vmware的NAT类型一样)
+3，routed 也是相当于hostonly，在isolated的基础上就是加了一个网关(仍然是和vmware的hostonly一致，但多了一个网关)
+
+
+
+中文版系统：
+virt-manager打开图形－－》编辑 －－》连接详情 －－》 虚拟网络 －－》点左下角的+号增加一个私有网络（选择名字，网络分配地址范围，dhcp的分配范围）
+--注意：这里最后一步有三种网络(注意:下面三种网络都为私有网络)：
+1，隔离的虚拟网络 相当vmware的hostonly，没有NAT，也没有网关(完全和vmware的hostonly类型一样)
+2，NAT   有网关，有NAT，可以通过宿主上外网(和vmware的NAT类型一样)
+3，路由的也是相当于hostonly，在isolated的基础上就是加了一个网关(仍然是和vmware的hostonly一致，但多了一个网关)
+
+
+把上面的步骤做完后，直接在宿主机用ifconfig或virsh net-list --all，就可以看到新加的网络了
+
+
+
+例五：手动加一个私有网络
+1，# cp /etc/libvirt/qemu/networks/default.xml /etc/libvirt/qemu/networks/default2.xml
+
+# vim /etc/libvirt/qemu/networks/default2.xml
+<network>
+  <name>default2</name>		--修改名字为default2
+  <uuid>243166ddb-e2fd-9983-1997-5e8efdc06c42</uuid>  --uuid随便修改一下
+  <bridge name='virbr2' stp='on' delay='0' />	--virbr1改成virbr2
+  <mac address='52:54:00:AF:51:25'/>	--MAC地址改一下，只改后面三位
+  <ip address='192.168.101.1' netmask='255.255.255.0'>	--IP改为101
+    <dhcp>
+      <range start='192.168.101.128' end='192.168.101.254' /> --dhcp地址范围也改成101的
+    </dhcp>
+  </ip>
+</network>
+
+
+2，# virsh net-define /etc/libvirt/qemu/networks/default2.xml	--定义一下,然后你可以使用virsh net-list --all去查看，状态为inactive,autostart的状态为no
+3，# virsh net-start default2	--启动
+# ifconfig virbr2 |head -2	--查看就有了	
+virbr2    Link encap:Ethernet  HWaddr 52:54:00:AF:51:25  
+          inet addr:192.168.101.1  Bcast:192.168.101.255  Mask:255.255.255.0
+
+
+
+# ls /etc/libvirt/qemu/networks/autostart/
+default1.xml   default.xml
+
+4，# virsh net-autostart default2  --让他开机自动启动
+
+# ls /etc/libvirt/qemu/networks/autostart/	--这里就会多了default2.xml了，其实都是网络配置文件的软链接
+default1.xml  default2.xml   default.xml
+
+
+刚加的网络配置文件都在下面的目录
+# ls /etc/libvirt/qemu/networks
+autostart  default1.xml  default2.xml  default.xml
+
+
+
+
+例六：修改一个网络
+1,# vim /etc/libvirt/qemu/networks/default2.xml	
+
+
+<network>
+  <name>default2</name>
+  <uuid>243166ddb-e2fd-9982-1996-5e8efdc06c42</uuid>
+  <forward dev='eth0' mode='route'>
+    <interface dev='eth0'/>
+  </forward>
+  <bridge name='virbr2' stp='on' delay='0' />
+  <mac address='52:54:00:AF:166:45'/>
+  <ip address='192.168.102.1' netmask='255.255.255.0'>	--我这里把以前的192.168.101.0的IP范围都改成了192.168.102.0
+    <dhcp>
+      <range start='192.168.102.128' end='192.168.102.254' />
+    </dhcp>
+  </ip>
+</network>
+
+
+保存后，使用ifconfig virbr2 查看，还是192.168.102.1，没有改变
+需要做下面三步：
+
+2,# virsh net-define /etc/libvirt/qemu/networks/default2.xml  --定义一个网络，使你的修改被他知道
+Network default2 defined from /etc/libvirt/qemu/networks/default3.xml
+
+3,# virsh net-destroy default2	--停一下这个网络
+Network default2 destroyed
+
+4,# virsh net-start default2	--再启这个网络
+Network default2 started
+
+
+ifconfig virbr2查看，成功修改成192.168.102.1
+
+
+上面的第一步和第二步可以统一成一步来做：
+# virsh  net-edit default2   --使用这个命令打开，修改，然后就直接net-destroy和net-start，不需要去net-define
+
+
+
+
+例七：
+图形删除一个网络
+英文版系统：
+virt-manager打开图形－－》edit －－》connections details －－》 virtual networks－－》选择你要删除的网络，然后左下角，先停，再删除就可以了
+
+中文版系统：
+virt-manager打开图形－－》编辑 －－》连接详情 －－》 虚拟网络 －－》选择你要删除的网络，然后左下角，先停，再删除就可以了
+
+
+用命令删除一个网络
+
+# virsh net-destroy default2	--停掉要删除的网络，用virsh net-list --all命令去查就变成了inactive状态
+
+# virsh net-undefine default2　　--这下就删除了这个网络定义了，并且物理上的配置文件也没了
+
+
+
+
+
+=====================================================================================
+
+
+
+例八：增加一个桥接网络：
+把物理网卡enp2s0桥接到br0(这个名字是自己定义的)
+
+
+
+1，在宿主机上创建一个桥接网络
+# systemctl stop NetworkManager
+# systemctl disable NetworkManager
+# systemctl status NetworkManager
+
+# yum install -y bridge-utils		--安装网桥客户端命令
+
+# vim /etc/sysconfig/network-scripts/ifcfg-br0  --此文件不存在，br0这个名字是自定义的
+DEVICE=br0		--名字对应好
+TYPE=Bridge		--这里的Birdge,B要大写,后面的irdge要小写
+BOOTPROTO=static
+IPADDR=3.3.3.251			--和你之前的网段要一致，否则无法上网
+NETMASK=255.255.255.0
+GATEWAY=3.3.3.2
+DNS1=114.114.114.114
+ONBOOT=yes
+
+
+
+2，把一个物理网卡加到一个桥接网络里，我这里是把enp2s0加到br0
+# vim /etc/sysconfig/network-scripts/ifcfg-enp0s25 	--原物理网卡enp0s25里的配置只留下这三句就可以了
+DEVICE="enp0s25"
+ONBOOT="yes"
+BRIDGE=br0
+
+3，添加网桥网卡，并将br0网桥启动
+# brctl addbr br0
+# ip link set dev br0 up
+
+4，查看网桥是否添加成功
+# brctl show
+bridge name	bridge id		STP enabled	interfaces
+br0		8000.000c29e27c63	no			
+
+5，重启网络	/etc/init.d/network restart 或者 systemctl restart network
+# brctl show 		--再次查看，就可以看到enp0s25网卡已经接入新添加的网桥了
+bridge name	bridge id		STP enabled	interfaces
+br0		8000.000c29e27c63	no			enp0s25
+
+在宿主机上ifconfig 查看就会有br0这个网卡,有IP;
+而原enp2s0网卡没有IP;这是正常的
+
+
+
+
+
+
+例九：图形修改一个虚拟机网卡链接
+virt-manager打开图形，双击你要修改的虚拟机－－》点击左上的一个!号（centos7里看到的是一个像灯泡一样的符号)按钮show virtual hardware detail－－>>找个网卡，修改成你想要改的网络
+
+
+建议网卡模块选择virtio(这样的话，你的网卡名称默认就会是ens33,ens37......这种)
+
+
+
+
+
+
+例十：命令修改一个虚拟机的网卡连接
+
+# virsh edit kvm3
+
+    <interface type='network'>
+      <mac address='52:54:00:07:8d:e5'/>
+      <source network='default'/>
+      <model type='virtio'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x03' function='0x0'/>
+    </interface>
+
+改成下面的样子
+
+    <interface type='bridge'>		--network改成了bridge
+      <mac address='52:54:00:07:8d:e5'/>
+      <source bridge='br0'/>		--network改成了bridge	default改成了br0	***前后都改
+      <model type='virtio'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x03' function='0x0'/>
+    </interface>
+
+
+
+# virsh shutdown kvm1
+# virsh start kvm1	--重启后，虚拟机就是桥接网络
+
+
+
+====================================================================================
+
+
+
+快照
+
+1,图形做快照（省略)
+
+
+2,命令做快照
+
+
+在rhel7和centos7下使用快照非常方便，速度也快很多(前提条件:磁盘为qcow2格式)
+查看帮助
+virsh help snapshot
+
+
+主要记住下面几条命令就ok
+# virsh snapshot-list kvm1			--列表kvm1这个虚拟机的快照
+# virsh snapshot-create-as --domain kvm1 snap1 --description "my first test snapshot"	--为kvm1当前状态创建一个快照，名称为snap1;后面的描述信息自定义
+# virsh snapshot-revert kvm1 snap1		--恢复kvm1的快照snap1
+# virsh snapshot-delete kvm1 snap1		--删除kvm1的快照snap1
+
+
+
+
+====================================================================================
+
+
+例十一:添加网卡或硬盘
+
+英文版系统：
+virt-manager－－》 双击打开kvm1－－》点左上角的灯泡符号show virtual hardware details －－》点左下角add devices 直接添加，并写上相关参数就可以(注意参数，device type都选择virtio,不需要重启虚拟机，可以直接生效，并且磁盘名叫vda,vdb,vdc...;如果你第一次加硬盘选择IDE disk,SATA disk,SCSI disk，需要重启,并且磁盘名叫sda,sdb,sdc...)
+
+中文版系统：
+virt-manager－－》 双击打开kvm1－－》点左上角的灯泡符号 －－》点左下角“添加硬件” 直接添加，并写上相关参数就可以(注意参数，“总线类型” 都选择virtio,不需要重启虚拟机，可以直接生效，并且磁盘名叫vda,vdb,vdc...;如果你第一次加硬盘选择IDE disk,SATA disk,SCSI disk，需要重启,并且磁盘名叫sda,sdb,sdc...)
+
+
+--用图形方式在线删除磁盘后，还要去物理上把它的磁盘xxx.qcow2文件给rm掉
+
+
+加网卡也是按照上面的图形方式去加就可以，但建议网卡模块选择virtio(这样的话，你的网卡名称默认就会是eth0,eth1......这种)
+
+
+
+
+
+
+例十二：直接用命令来添加一个硬盘设备
+1,使用dd命令创建一个磁盘文件
+# dd if=/dev/zero of=/var/lib/libvirt/images/kvm4-2.img bs=1M count=1 seek=400
+--seek是指跳过多少个BS块，这里就是产生一个400M大小的文件（实际大小只1M）
+
+
+# qemu-img info /var/lib/libvirt/images/kvm4-2.img
+image: /var/lib/libvirt/images/kvm4-2.img
+file format: raw				--格式为raw(这是老版本的默认格式，新版本是qcow2格式)
+virtual size: 3.8T (4194305048576 bytes)
+disk size: 1.0M
+
+# cd /var/lib/libvirt/images/
+# qemu-img convert -f raw -O qcow2 kvm4-2.img kvm4-2.qcow2	--把kvm4-2.img文件转换成一个新文件kvm4-2.qcow2（格式也转换成qcow2)
+# rm kvm4-2.img -rf	--原来的这个文件不用了就可以删除掉了
+
+
+# qemu-img info /var/lib/libvirt/images/kvm4-2.qcow2 
+image: /var/lib/libvirt/images/kvm4-2.qcow2
+file format: qcow2				 --转化后的新文件格式就为qcow2格式了
+virtual size: 3.8T (4194305048576 bytes)
+disk size: 256K
+cluster_size: 65536
+Format specific information:
+    compat: 1.1
+    lazy refcounts: false
+
+
+
+
+2,编辑虚拟机的配置文件
+# virsh edit kvm4  			--kvm4为需要添加磁盘的虚拟机名称
+<devices>与</devices>之间加上下面的一段,也可以把其它磁盘的配置定义拷贝一段进行修改
+
+
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2' />	   --格式确认为qcow2
+      <source file='/var/lib/libvirt/images/kvm4-2.qcow2'/>  --路径名称改成kvm4-2.qcow2
+      <target dev='vdb' bus='virtio'/>	--新加的硬盘，就叫vdb
+      <address type='pci' domain='0x0000' bus='0x01' slot='0x08' function='0x0'/>	--bus和slot的值不能重复(只要这个编号没有被重复使用就可以)	
+    </disk>
+
+
+3，重启虚拟机后，登录使用fdisk就能查看到这个400m大小的硬盘了
+
+
+
+
+
+例十三:因为有些人的机器的/var目录空间不够，想把磁盘文件改到其它目录（如/data/kvm/目录)
+
+# virsh destroy kvm1  --先停掉kvm1
+
+# mv /var/lib/libvirt/images/kvm1.qcow2 /data/kvm/
+
+
+# virsh edit kvm1
+......
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2' />
+      <source file='/data/kvm/kvm1.qcow2'/>	--把这个路径改成mv后的新路径
+      <target dev='vda' bus='virtio'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x05' function='0x0'/>
+    </disk>
+......
+
+
+# virsh start kvm1
+
+===================================================================================
+
+
+kvm 的远程图形管理
+
+
+例十四:在192.168.1.9(宿主机)上远程图形管理192.168.1.251(宿主机)
+
+1，先在/etc/hosts里绑定对方（被管理的宿主机器)的主机名
+
+
+2，做ssh等效性
+# ssh-keygen 	--直接三次回车
+
+# ssh-add /root/.ssh/id_rsa		--加入自己的私钥
+Identity added: /root/.ssh/id_rsa (/root/.ssh/id_rsa)
+
+
+# ssh-copy-id -i /root/.ssh/id_rsa.pub 192.168.1.251
+--把自己的公钥scp传给对方
+
+
+
+3,所有的被管理客户端宿主机，需要启动libvirtd服务
+
+
+
+4，virt-manager－－》file－－》add connection－－》填上要远程连接的主机IP（或主机名，但要求/etc/hosts绑定)
+中文版：
+virt-manager－－》文件－－》添加连接－－》填上要远程连接的主机IP（或主机名，但要求/etc/hosts绑定)
+
+
+
+5，连接上去之后，就可以看到有远程的虚拟客户机，双击就可以远程调取他们的图形了
+
+
+
+--或者用命令的方式去连接
+# virt-viewer -c qemu+ssh://root@192.168.122.82/system kvm3
+--表示使用root用户(当然前面你做的ssh等效性需要是root用户)去访问192.168.1.251上叫kvm1的虚拟机
+
+

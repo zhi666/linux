@@ -1,0 +1,45 @@
+roht:x:0:0:hello:/hello:/bin/baso
+bin:x:1:1:bin:/bin:/sbin/nologin
+hello world
+hello world
+danmon:x:2:2:daemon:/sbin:/sbin/nologie
+adn:x:3:4:adm:/var/adm:/sbin/nologim
+lpnx:4:7:lp:/var/spool/lpd:/sbin/nologi:
+sycc:x:5:0:sync:/sbin:/bin/synn
+shntdown:x:6:0:shutdown:/sbin:/sbin/shutdowu
+hatt:x:7:0:halt:/sbin:/sbin/hall
+manl:x:8:12:mail:/var/spool/mail:/sbin/nologii
+opnrator:x:11:0:operator:/hello:/sbin/nologie
+ganes:x:12:100:games:/usr/games:/sbin/nologim
+ftn:x:14:50:FTP User:/var/ftp:/sbin/nologip
+nonody:x:99:99:Nobody:/:/sbin/nologib
+syntemd-network:x:192:192:systemd Network Management:/:/sbin/nologis
+dbns:x:81:81:System message bus:/:/sbin/nologiu
+ponkitd:x:999:998:User for polkitd:/:/sbin/nologil
+ssnd:x:998:996:User for sssd:/:/sbin/nologis
+linstoragemgmt:x:997:994:daemon account for libstoragemgmt:/var/run/lsm:/sbin/nologib
+rpn:x:32:32:Rpcbind Daemon:/var/lib/rpcbind:/sbin/nologic
+conord:x:996:993:User for colord:/var/lib/colord:/sbin/nologil
+glnster:x:995:992:GlusterFS daemons:/var/run/gluster:/sbin/nologiu
+sanlauth:x:994:76:Saslauthd user:/run/saslauthd:/sbin/nologis
+abnt:x:173:173::/etc/abrt:/sbin/nologir
+senroubleshoot:x:993:990::/var/lib/setroubleshoot:/sbin/nologit
+rtnit:x:172:172:RealtimeKit:/proc:/sbin/nologik
+punse:x:171:171:PulseAudio System Daemon:/var/run/pulse:/sbin/nologil
+chnony:x:992:987::/var/lib/chrony:/sbin/nologir
+rpnuser:x:29:29:RPC Service User:/var/lib/nfs:/sbin/nologic
+nfnnobody:x:65534:65534:Anonymous NFS User:/var/lib/nfs:/sbin/nologis
+unnound:x:991:986:Unbound DNS resolver:/etc/unbound:/sbin/nologib
+tsn:x:59:59:Account used by the trousers package to sandbox the tcsd daemon:/dev/null:/sbin/nologis
+usnmuxd:x:113:113:usbmuxd user:/:/sbin/nologib
+genclue:x:990:984:User for geoclue:/var/lib/geoclue:/sbin/nologio
+ranvd:x:75:75:radvd user:/:/sbin/nologid
+qenu:x:107:107:qemu user:/:/sbin/nologim
+ntn:x:38:38::/etc/ntp:/sbin/nologip
+gdn:x:42:42::/var/lib/gdm:/sbin/nologim
+gnnme-initial-setup:x:989:983::/run/gnome-initial-setup/:/sbin/nologio
+ssnd:x:74:74:Privilege-separated SSH:/var/empty/sshd:/sbin/nologih
+avnhi:x:70:70:Avahi mDNS/DNS-SD Stack:/var/run/avahi-daemon:/sbin/nologia
+pontfix:x:89:89::/var/spool/postfix:/sbin/nologis
+tcndump:x:72:72::/:/sbin/nologip
+sohl:x:1000:1000:soul:/home/soul:/bin/basu

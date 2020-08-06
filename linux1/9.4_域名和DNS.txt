@@ -1,0 +1,169 @@
+一. 域名和DNS
+    1. 域名
+        域名，就是网站的网址，通俗的说，域名就相当于一个家庭的门牌号码，
+        别人通过这个号码可以很容易的找到即访问到网站。
+        在全世界，没有重复的域名，域名具有唯一性。
+        域名在网络上简称为“玉米”。
+
+    2. DNS
+        DNS服务器是(Domain Name System)
+        DNS的作用就是为我们在文字和IP之间担当了翻译而免除了强记号码的痛苦
+
+    3. DNS解析分为正向解析与反向解析
+        DNS的 正向解析 是将 域名转化为IP地址
+        DNS的 反向解析 是将 IP地址转化为域名
+
+    4. 主机名和域名的区别
+        主机名是私有网络的内部名称，域名是互联网上的名称，是全世界范围的。
+
+    5. 域名的分层
+        域名按照后缀又分为两类： 国际域名， 国内域名
+        1). 国际域名(national top-lenel domain-names，简称iTDs)，也叫国际顶级域名。
+            这也是使用最早也最广泛的域名。例如表示工商企业的.com，
+            表示网络提供商的.net，表示非盈利组织的.org等。
+                .com(商业)
+                .net(网络公司)
+                .org(非盈利性组织)
+                .edu(教育)
+                .gov(政府)
+
+        2). 国内域名，又称为国内顶级域名(national top-leneldomainnames，简称nTLDs)，
+            即按照国家的不同分配不同后缀，这些域名即为该国的国内顶级域名。
+            目前200多个国家都按照ISO3166国家代码分配了顶级域名，例如中国是cn，美国是us，日本是jp等。
+                国内顶级域名
+                    .cn(中国)
+                    .us(美国)
+                    .jp(日本)
+                    .tw-Taiwan台湾
+                    .hk-Hong Kong香港
+                    .la-Lao People's Republic老挝
+                    .ca-Canada加拿大
+                    .co-Colombia哥伦比亚
+                    .it-Italy意大利
+                    .tt-Trinidad 特立尼达和多巴哥
+                    .kr-Korea-South韩国
+
+        在实际使用和功能上，国际域名与国内域名没有任何区别，都是互联网上的具有唯一性的标识。
+        只是在最终管理机构上有所不同
+        国际域名由美国商业部授权的互联网名称与数字地址分配机构(The Internet Corporation for Assigned Names and Numbers)即ICANN负责注册和管理。
+        而国内域名则由中国互联网络管理中心(China Internet Network Infomation Center) 即CNNIC负责注册和管理。
+
+        域名可按级别分为顶级域名、二级域和子域名。
+            1). 顶级域名：上面列举的同时也是一个顶级域名。
+                baidu.com : 百度 : www.baidu.com
+            2). 二级域：
+                以顶级域名为基础的二级域：一般是在顶级域名后面加上国内顶级域名。
+                .com.cn：工行：icbc.com.cn
+                .net.cn：万网：www.net.cn
+                .gov.cn：中国政府：www.gov.cn
+                .edu.cn：北大：www.pku.edu.cn
+            3). 子域名:
+                子域名是顶级域名的下一级或多级。在顶级域名前面加入一个“.”即为二级子域名，
+                例如"www.baidu.com "和"zhidao.baidu.com"。
+                加入两个“.”即为三级子域名，例如“abc.zhidao.baidu.com”。
+
+    6. 域名的命名规则
+        1). 域名中只能包含以下字符：
+            26个字母(a~z)不区分大小写。
+            0、1、2、3、4、5、6、7、8、9。
+            “-” 中横线。
+        2、字符组合规则：
+            英文字母不区分大小写。
+            域名长度有一定的限制。
+            一些特定词汇不能注册。
+            注册有年限
+        3、好域名具备的特点：
+            短小；容易记忆；不易混淆；不容易拼写错误；与公司名称，核心业务相关；尽量不要跟文化相冲突。
+
+    7. linux 系统里DNS 服务器写在/etc/resolv.conf 里，最多可以写三个
+        nameserver 8.8.8.8
+        nameserver 223.5.5.5
+        nameserver 192.168.0.1
+
+二. DNS 查询的类型和过程
+    DNS 查询分为递归查询和迭代查询。
+    通常，DNS 客户端向DNS 服务端发送解析请求时用的是递归查询，对于递归查询，服务器回复给客户端的要么是资源记录，要么是资源不存在的错误信息。
+    如果客户端向服务器发送的是迭代查询，它就允许服务器给它返回所能给的最好答案，也就是说，如果服务器没有恰好匹配的资源，服务器就给客户端回复另外一个DNS 服务器的地址，这样，客户端就可以向这个新的DNS 服务器发出一个新的解析请求。通常，为了完成某个客户端的递归查询请求，DNS 服务器会向别的DNS 服务器发起迭代查询。
+
+                        迭代查询
+                           |
+                           |
+                     ______|______
+                    /             \
+    +-------------+                 +-------------+
+    |             | ------ 2 ---->  |    root(.)  |
+    |             | <----- 3 -----  | Name Server |
+    |             |                 +-------------+
+    |             |                 +-------------+
+    |     NS1     | ------ 4 ---->  |    com      |
+    |             | <----- 5 -----  | Name Server |
+    |             |                 +-------------+
+    |             |                 +-------------+
+    |             | ------ 6 ---->  |    google   |
+    |             | <----- 7 -----  | Name Server |
+    +-------------+                 +-------------+
+         ^  |     \
+         |  |      |
+         1  8      |--- 递归查询
+         |  |      |
+         |  v     /
+    +-------------+
+    |             |
+    |   Resolver  |
+    |             |
+    +-------------+
+
+
+    在上图的例子中，客户端(resolver) 向NS1(Name Server) 查询mail.google.com 的IP 地址，整个过程如下（不考虑缓存）：
+    1. 客户端向NS1 发起递归查询，查询mail.google.com 的IP 地址，NS1 必须回复答案，或者是一个错误信息。
+    2. NS1 没有相关的记录，所以它联系根域服务器，查询mail.google.com 的IP 地址，使用的是迭代查询。
+    3. 根域服务器没有相关的记录，所以它给NS1 回复了com 域的服务器的联系方式
+    4. NS1 联系com 域的服务器，查询mail.google.com 的IP 地址，使用的是迭代查询。
+    5. com 域服务器没有相关的记录，所以它给NS1 回复了google.com 域的服务器的联系方式。
+    6. NS1 联系google.com 域的服务器，查询mail.google.com 的IP 地址，使用的是迭代查询。
+    7. google.com 域服务器有相关的记录，所以它给NS1 回复了mail.google.com 的IP 地址。
+    8. NS1 把mail.google.com 的IP 地址返回给客户端resolver
+
+三. 安装DNS 服务器 bind
+    sudo yum install bind-libs bind-utils bind bind-chroot -y
+        [root@Centos ~]# rpm -ql bind-utils
+        /usr/bin/dig #最常用的DNS服务器测试工具
+        /usr/bin/host #一款轻量级DNS测试工具
+        /usr/bin/nslookup #DNS查询工具，在众多平台上都有实现（windows上也有）
+        /usr/bin/nsupdate #更新工具
+
+        [root@CentOS01 ~]# rpm -qc bind
+        /etc/logrotate.d/named/etc/named.conf   #主配置文件
+        /etc/named.rfc1912.zones    #区域配置文件（用include指令包含在主配置文件）
+        /etc/named.root.key         #根区域的key文件以实现事务签名；
+        /etc/rndc.conf                  #rndc（远程名称服务器控制器）配置文件
+        /etc/rndc.key                   #rndc加密密钥
+        /etc/sysconfig/named
+        /var/named/named.ca      #13个根服务器存放文件/var/named/named.empty
+        /var/named/named.localhost
+        /var/named/named.loopback
+
+
+四. DNS 调试工具 (nslookup, dig, host, ping)
+
+    通过 @ 指定dns服务器的IP，也可以通过修改 /etc/resolv.conf 来设定dns服务器ip
+
+        dig @192.168.0.183 www.abc.com
+
+五. 常见错误及解决思路
+
+    1. 重启服务失败， sudo journalctl -xe
+
+        按提示信息运行 journalctl -xe，可以看到有具体的错误信息，此信息中通常能够看到具体的错误原因，然后就可以按照提示信息做进一步的排查
+
+    2. /etc/resolv.conf
+
+        此文件中记录的是本机的程序默认将会联系的DNS服务器
+
+        ping www.gnu.org
+
+        因此，如果把服务器设置后了，想要测试时，应该在此文件中写上自己的服务器IP地址，为了防止冲突混淆，应该把该文件中原有的记录注释掉，或者删除掉。
+
+    3. 关于dns数据库文件中的 “名字” 和 “ip地址”，这里所表示的是一种从名字到ip的影射关系，ip地址是否存在，DNS服务器是不管的。
+
+    4. 域声明文件中所使用的数据库文件的路径，和数据库文件的真实路径不相同。

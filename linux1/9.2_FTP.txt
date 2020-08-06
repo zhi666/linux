@@ -1,0 +1,126 @@
+一. ftp是什么
+    FTP 是File Transfer Protocol（文件传输协议）的英文简称，而中文简称为“文传协议”。
+    用于Internet上的控制文件的双向传输。
+
+    常用的ftp 客户端工具：ftp, lftp
+
+    安装vsftpd 服务器
+        sudo yum install vsftpd
+
+
+    ftp 有两种模式，都是针对数据传输来说的，而且是从服务器的角度来说的：
+        1. 主动模式：客户端提供一个端口用来传输数据，然后服务器发起连接（服务器[主动]）
+            FTP 客户端首先和服务器的TCP 21端口建立连接，用来发送命令，
+            客户端需要接收数据的时候在这个通道上发送PORT命令。
+            PORT命令包含了客户端用什么端口接收数据。在传送数据的时候，
+            服务器端通过自己的TCP 20端口连接至客户端的指定端口发送数据。
+            FTP server必须和客户端建立一个新的连接用来传送数据。
+        2. 被动模式：服务器提供一个端口用来传输数据，然后客户端发起连接（服务器[被动]）
+            建立控制通道和主动模式类似，但建立连接后发送Pasv命令。
+            服务器收到Pasv命令后，打开一个临时端口（端口号大于1023小于65535）
+            并且通知客户端在这个端口上传送数据的请求，客户端连接FTP服务器
+            的这个端口，然后FTP服务器将通过这个端口传送数据。
+
+    ftp 的端口
+        1. 命令端口，默认是21
+        2. 数据传输端口，受数据传输模式影响，默认情况下，被动模式下，
+            两端都是随机端口，主动模式下，服务器使用20端口，客户端使用随机端口
+
+    vsftpd服务的配置文件： /etc/vsftpd/vsftpd.conf
+    vsftpd 的配置参数可参考man 文档 vsftpd.conf(5)
+
+    anonymous_enable=YES                <-- 启用匿名登录(为什么要有匿名登陆)
+    local_enable=YES                    <-- 启用本地用户登录，本地用户就是ftp服务器的系统用户
+    write_enable=YES                    <-- 写操作的总开关
+    download_enable=NO                  <-- 是否允许下载, 默认是YES
+    local_umask=022                     <-- 本地用户创建文件时使用的umask
+    anon_umask=0222                     <-- 匿名用户创建文件时使用的umask
+    anon_upload_enable=YES              <-- 是否允许匿名用户上传
+    anon_mkdir_write_enable=YES         <-- 是否允许匿名用户创建目录
+    chown_uploads=YES                   <-- 是否修改匿名用户上传的文件的所有者
+                                            这样修改后匿名用户上传的文件的
+                                            权限将会受chown_upload_mode
+                                            选项的影响，此选项与chown_username配合
+# chown_username=nobody                 <-- 与chown_uploads 配合，指定新的所有者的用户名
+    chroot_local_user=YES               <-- 把本地用户限制在其初始目录里
+    local_root=/ftp                     <-- 定义本地用户的初始目录
+    anon_root=/ftp                      <-- 定义匿名用户的初始目录
+
+    userlist_enable=YES                 <-- 启用用户名单
+    userlist_deny=no                    <-- 定义用户名单的类型（白名单，黑名单）
+    pasv_min_port=33301                 <-- 被动模式的最小端口
+    pasv_max_port=33310                 <-- 被动模式的最大端口
+    anon_max_rate=102400                <-- 限制匿名用户的最大传输速率，单位是字节
+    local_max_rate=102400               <-- 限制本地用户的最大传输速率，单位是字节
+    max_clients=1000                    <-- 最多允许多少个并发连接
+    max_per_ip=10                       <-- 每个IP 的最大连接数
+
+    配置白名单/黑名单
+    userlist_enable     <-- 启用名单
+    userlist_file       <-- 名单数据
+    userlist_deny       <-- 关键的参数，设为YES 就是黑名单（默认），设为NO就是白名单
+
+
+    允许root用户登录
+    1. 注释ftpusers 文件中的root那一行
+    2. 如果启用了黑名单，就要确保root不在黑名单中，如果启用了白名单，就要确保root在白名单中
+
+
+    限速和限连接数
+    anon_max_rate
+    local_max_rate
+    max_clients
+    max_per_ip
+
+    可以用wget来检测ftp的下载速度
+    wget ftp://10.1.1.1/pub/50m
+    wget ftp://u9:abc@10.1.1.1/50m
+
+    用tcpwrapper 来限制连接ftp的客户端
+
+    如何确定某个服务是否支持tcpwrapper？
+    ldd /usr/sbin/vsftpd | grep wrap
+
+    /etc/hosts.allow
+    /etc/hosts.deny
+
+    语法：
+    vsftpd: 10.1.1.15,10.1.1.96,10.1.1.0/255.255.255.0
+      |                         |
+      |                         |
+      v                         v
+    服务的进程名字        客户端的地址
+
+
+
+    程序按以下顺序查找两个文件，找到第一个匹配的规则后就不再往下查找：
+    1. 如果在/etc/hosts.allow 中，则允许
+    2. 如果在/etc/hosts.deny中，则拒绝
+    3. 如果都不在两个文件中，则允许
+
+    如果以上两个文件不存在，就当作文件为空，即允许。
+
+    关于hosts.allow 和 hosts.deny 这两个文件的配置方法，可参考man 文档：
+    man 5 hosts_options
+    man 5 hosts_access
+
+    iptables -A INPUT [OPTIONS]... -j ACCEPT
+    iptables -A INPUT [OPTIONS]... -j REJECT
+    iptables -P INPUT DROP
+
+
+
+    查看服务器上与客户端交互的ftp进程
+
+
+    1. 找出自己的进程号
+        ps -C ftp       <-- 找出了10292
+
+    2. 根据进程号找出自己的端口号
+        netstat -tpn | grep 10292   <-- 找到了 3.3.3.7:34330
+
+    3. 在服务器上，根据远程端口号和ip地址，找出服务器上对应的进程
+        netstat -tpn | grep 3.3.3.7:34330   <-- 找到了 8161
+
+    4. 查看该进程的euid
+        ps -o pid,euid -p 8161      <-- 找到了nobody，发现不是ftp，原因确认
