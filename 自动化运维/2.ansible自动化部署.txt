@@ -1,0 +1,838 @@
+﻿运维自动化概述
+	运维发展经历：
+	(1) 靠纯手工、重复地进行软件部署和运维
+	(2) 通过编写脚本方便地进行软件部署和运维
+	(3) 借助第三方工具高效、方便地进行软件部署和运维
+	运维自动化：把零碎的工作集中化，把复杂的工作简单有序化，把流程规范化，最大化地解放生产力，也就是解放运维人员。自动化针对的范围可以大致分为安装自动化、部署自动化、监控自动化等方面。
+
+	运维自动化工具：
+	安装自动化			部署自动化			监控自动化
+	kickstart			ansible				Nagios
+	cobbler				ControlTier			Catci
+	OpenQRM				Func				Zabbix
+	Spacewalk			Puppet				Zenoss Core
+
+devops
+
+===============================================
+
+ansible自动化部署讲解：
+
+开始前准备工作：
+	1、关闭防火墙和selinux
+	2、绑定主机名
+	3、绑定hosts
+
+由于ansible使用的是ssh协议，需先将每台服务器间设置好ssh等效性（密钥对登录）
+
+1、(1)生产key-values对
+# ssh-keygen			# 全部回车即可
+	Generating public/private rsa key pair.
+	Enter file in which to save the key (/root/.ssh/id_rsa): 
+	Created directory '/root/.ssh'.
+	Enter passphrase (empty for no passphrase): 
+	Enter same passphrase again: 
+	......
+#(2) 生成公钥/私钥
+# ssh-keygen -t rsa 
+
+2、（1）,将公钥写入需要管理的服务器
+# ssh-copy-id -i ~/.ssh/id_rsa.pub -p 22 root@192.168.224.11
+
+    （2）,批量复制秘钥并授权
+ansible server -m shell -a 'mkdir ~/.ssh' -k
+ansible server -m copy -a 'src=~/.ssh/id_rsa.pub dest=~/.ssh/authorized_keys mode=0600' -k
+
+3、安装ansible软件包
+# yum -y install ansible
+
+# ll /etc/ansible
+	总用量 24
+	-rw-r--r-- 1 root root 19179 1月  30 2018 ansible.cfg		
+	-rw-r--r-- 1 root root  1016 1月  30 2018 hosts			
+	drwxr-xr-x 2 root root     6 1月  30 2018 roles
+
+3、简单测试ansible的使用
+# vim /etc/ansible/hosts		# 指定需要被管理的服务器
+	[client]	# 指定服务器群组，下面的IP即为该群组的所有成员
+	192.168.224.11
+	192.168.224.12
+	192.168.224.13
+	[webserver]	# 群组可以有多个
+	3.3.3.11
+	3.3.3.12
+
+  222.187.222.113 ansible_ssh_user=root  #也可以指定用户 
+  
+4、使用ansible来ping一下所有被管理的服务器
+# ansible client -m ping 	# client 表示只查看这个群组里的主机，all 表示所有
+	node2.com | SUCCESS => {
+		"changed": false, 
+		"ping": "pong"
+	}
+	node3.com | SUCCESS => {
+		"changed": false, 
+		"ping": "pong"
+	}
+	
+========================================================
+
+ansible常用模块学习
+
+# ansible-doc -l    # 列出 Ansible 支持的模块
+# ansible-doc ping  # 查看ping模块帮助信息
+
+==========================================================
+
+1、command，该模块为ansible的默认模块，支持所有远程权限范围内的命令，不支持管道；例如：
+# ansible client -m command -a 'free -m'		# 查看client群组下所有机器的内存使用情况
+	192.168.224.11 | SUCCESS | rc=0 >>
+				  total        used        free      shared  buff/cache   available
+	Mem:            976         613          68           4         294         162
+	Swap:          1999         225        1774
+
+==========================================================
+
+2、 shell，和command一样，且支持管道符号；例如：
+# ansible client -m shell -a 'cat /etc/passwd|head -1'
+	192.168.224.11 | SUCCESS | rc=0 >>
+	root:x:0:0:root:/root:/bin/bash	
+
+==========================================================
+	
+3、script，在被管理的机器上执行管理机器上的脚本，相当于先scp，然后sh；例如：
+# vim /root/test.sh
+#!/bin/bash
+echo 'test'
+
+chmod +x  test.sh
+# ansible client -m script -a '/root/test.sh'		# 在被管理机器执行本机的test.sh脚本
+	192.168.224.11 | SUCCESS => {
+    "changed": true, 
+    "rc": 0, 
+    "stderr": "Shared connection to 192.168.224.11 closed.\r\n", 
+    "stdout": "test\r\n", 
+    "stdout_lines": [
+        "test"
+    ]
+}
+
+
+==========================================================
+
+4、copy，实现从管理机器上拷贝文件到被管理机器上，类似scp功能；例如：
+# ansible client -m copy -a 'src=/root/test.sh dest=/root/ owner=root group=root mode=0755'
+
+或者也可以将要拷贝的文件放入/etc/ansible/roles/files目录种，这样的话拷贝时，就不需要再加路径了
+
+说明：
+src		指定管理机器上的文件路径
+dest	指定传过去后放在被管理机器的哪个目录
+owner	指定传过去后文件所有者
+group	指定传过去后文件所属组
+mode	指定传过去后文件的权限
+
+==========================================================
+
+5、yum，实现管理被管理机器上的rpm包；例如：
+# ansible client -m yum -a 'name=nmap state=installed'    安装nmap
+   ansible client -m yum -a 'name=httpd state=installed'    安装apache
+   ansible client -m yum -a 'name=httpd* state=removed'   卸载apache
+   ansible client -m yum -a 'name=mariadb state=installed'
+   ansible client -m yum -a 'name=mariadb-server state=installed' 安装mariadb
+或者 ansible client -a 'yum install -y mariadb mariadb-server '   也可以安装mariadb
+说明：
+name 	指定要安装的rpm包名称
+state 	指定状态
+		installed or present	安装软件包
+		absent or removed		卸载软件包
+
+==========================================================
+
+6、cron，修改被管理机的crontab任务；例如：
+# ansible client -m cron -a "name='check dirs' hour='5,2' job='ls -alh > /dev/null'"
+
+说明：
+name 	指定时间任务名称（加备注）
+hour 	指定时间任务周期(minute,hour,day,month,weekday)
+job 	指定任务内容
+state	指定状态
+		absent	取消指定时间任务
+
+创建后格式：
+# crontab -l
+	#Ansible: check dirs
+	* 5,2 * * * ls -alh > /dev/null
+
+==========================================================
+
+7、mount，实现被管理机的分区挂载(添加至/etc/fstab文件)；例如:
+# ansible client -m mount -a 'name=/yum src=/dev/sdb1 fstype=ext4 opts=ro state=present'
+或者：ansible client -m shell -a 'mount /dev/sr0  /yum'
+说明：
+
+name  	指定挂载目录
+src 	指定挂载源
+fstype 	指定挂载源的文件系统类型
+opts 	指定挂载后的权限
+state 	指定状态
+		present		只修改fstab文件内容，不做挂载操作
+		absent		取消挂载，并将挂载目录删除，还会删除fstab文件中对应内容
+		unmounted	取消当前挂载的内容，而不修改fstab文件内容
+		mounted		如果指定的挂载点没有挂载，则挂载，且将会写入fstab文件
+
+==========================================================
+
+8、service，管理被管理机器上的服务（启动、停止、重启等）；例如：
+# ansible client -m service -a "name=nginx state=stopped"	# 停止nginx(注意观察单词)
+# ansible client -m service -a "name=nginx state=started"	# 启动nginx
+# ansible client -m service -a "name=nginx state=restarted"	# 重启nginx
+# ansible client -m service -a "name=nginx state=reloaded"	# 重新载入nginx
+
+说明：
+name 	指定服务名
+state 	指定需要执行的操作
+
+==========================================================
+
+9、user，管理被管理机器上的用户；例如：
+# ansible client -m user -a "name=ninmu shell=/bin/sh home=/home/munin group=8888 uid=8888 comment='user ninmu'"
+
+创建后格式：
+ninmu:x:8888:1000:user ninmu:/home/munin:/bin/sh
+
+
+说明：
+name 	指定用户名
+shell 	指定shell类型
+home 	指定用户家目录
+group 	指定用户所属组（前提是指定的组已经存在）
+uid 	指定用户uid
+comment 指定用户描述项
+remove	删除用户时是否删除家目录（remove=yes）
+state	指定状态
+		absent	删除用户
+		
+删除用户实例：
+# ansible client -m user -a 'name=ninmu state=absent remove=yes'	从被管理机器上删除ninmu这个用户
+
+
+==========================================================
+
+10、file，被管理机器上的文件和目录管理（创建，删除）；例如：
+创建目录：
+# ansible client -m file -a 'name=/data mode=0644 state=directory'
+
+创建普通文件：
+# ansible client -m file -a 'name=/data/test.txt mode=0777 state=touch'
+
+删除文件或目录：
+# ansible client -m file -a 'name=/data/abc state=absent'
+
+创建一个软连接：
+# ansible client -m file -a 'src=/data/test.txt dest=/root/test state=link'
+
+说明：
+name	指定目录或文件名
+mode	指定创建后文件或目录的权限
+owner	指定所属用户
+group	指定所属组
+dest	指定目标路径
+state	指定类型：
+	directory 	如果目录不存在则创建该目录
+	touch		创建普通文件
+	absent		删除文件或目录
+	link		创建软链接
+
+
+==========================================================
+
+11、unarchive，将管理机器上的归档文件或压缩文件释放至指定被管理机器上；例如：
+创建测试压缩文件:
+# tar czvf test.tar.gz test.sh
+
+将管理机器上的测试压缩文件释放至被管理机器：
+# ansible client -m unarchive -a 'src=/root/test.tar.gz dest=/root/'
+
+释放被管理机器上的压缩文件：
+# ansible client -m unarchive -a 'src=/root/local.tar.gz dest=/usr/src/ remote_src=yes'
+
+说明：
+src		指定要解压的压缩或归档文件名（管理机器端）
+dest	指定要将文件释放到哪里（被管理机器端）
+owner	指定释放后文件所属用户
+group	指定释放后文件所属组
+mode	指定释放后文件权限
+remote_src		如果需要释放的文件就在被管理机器端时使用(remote_src=yes)
+
+
+==========================================================
+
+
+ **************************************************
+ * 更多相关模块，请自行查阅，推介使用ansilbe-doc  *
+ **************************************************
+
+
+==========================================================
+
+
+
+ansible-playbook 之 YAML语法
+yaml文件是一种playbook使用的配置管理语言，也可以理解为ansible的任务剧本，每个剧本中可以定义N个任务，剧本会将你定义好的任务，依次推送至被管理机器上，从而实现批量自动部署
+
+playbook （中文翻译“剧本”）
+tasks	（剧本中的“任务”）
+
+***********************************************************
+
+特别提醒：
+playbook动作脚本中，一定要注意不同级别间的缩进，多一个少一个缩进空格都会导致整个脚本无法执行
+所以；“一定要注意语法间的缩进”
+		
+*********************************************************
+
+
+==========================================================
+
+
+变量设置
+有些重复性的内容，如果不设置变量，那就需要每次重复写，有了变量，需要的时候直接调用设置好的变量即可；
+
+注意：该变量设置方式仅在yaml脚本内使用有效
+
+yaml变量设置格式
+
+键值对（普通变量设置）
+key: value
+name: user1
+: 与value之间必须有一个空格
+
+list（列表）
+name:
+ - user1
+ - user2
+ - user3
+- 与每一个value之间必须有一个空格
+
+字典
+{name: zhangsan, shell: /bin/bash, home: /home/abc}
+key与value之间必须有一个空格
+
+==========================================================
+
+变量设置实例：
+
+ansible的变量大致分为两种：
+1、使用 vars:  或  with_items: （迭代方式） 直接写入剧本的；局部变量，该类型的只对当前剧本有效
+
+2、写入vars目录的；全局变量，整个剧本都可以使用该变量
+
+==========================================================
+
+直接定义在动作脚本内的，这种方式定义的变量可以理解为局部变量，只有当前文件内有效
+例如：
+# vim test.yml
+---
+- hosts: client				# 指定被管理机器列表
+  remote_user: root			# 指定执行该剧本的用户
+  vars:						# 设置变量（vars）
+    username: zhangsan
+  tasks:					# 开始任务
+  - name: test				# 定义任务名
+    shell: 'echo {{ username }} >/root/test.txt'		# {{ username }} 调用上方设置好的变量
+运行剧本：ansible-playbook  test.yml  
+==========================================================
+  
+使用with_items: 定义的可迭代变量，调用时自动从上至下依次调用设置的所有值；
+例1：
+# vim /etc/ansible/useradd.yml
+---
+- hosts: client
+  remote_user: root
+  tasks:
+  - name: test
+    shell: 'echo {{ item }} >>/root/test.txt'	# 此类型变量调用时变量名必须为item
+    with_items:
+      - zhangsan
+      - lisi
+或者shell 模块可以这样写
+---
+- hosts: client
+  remote_user: root
+  vars:
+    username: zhangshan
+  tasks:
+  - name: test
+    shell:
+      echo {{ username }} > /root/test.txt
+  - name: test1
+    shell:                                                           #shell模块这样写也可以
+      echo {{ item }} >> /root/test.txt                                 
+    with_items:
+      - lishi
+      - wangwu
+
+
+
+例2：
+with_items中元素还可为字典例如:
+# vim useradd.yml
+---
+- hosts: client
+  remote_user: root
+  tasks:
+  - name: add users
+    shell: echo '{{ item.name }} 的年龄是 {{ item.age }}' >>/root/test.txt	# 调用变量时指定字典元素
+    with_items:
+      - { name: 'zhangsan', age: '18' }
+      - { name: 'lisi', age: '19' }
+	  
+==========================================================
+
+
+ansible基本目录结构说明：
+# tree
+.
+├── ansible.cfg		# ansible主配置文件
+├── hosts			# 存放被管理机器列表
+└── roles			# 存放ansible的剧本文件
+    ├── files			# 存放要推送到被管理机器上的文件，调用该目录的文件无需加路径
+    ├── tasks			# 存放剧本文件
+    ├── templates		# 存放模板文件（可变文件，动态文件）
+    └── vars			# 存放定义变量的文件
+
+
+==========================================================
+ 
+将变量定义到vars目录中的实例（全局变量）
+
+直接写入vars目录内的文件中，可理解为全局变量，任何动作脚本都可以调用
+格式为 "key: values"；例如：
+# vim /etc/ansible/vars/test.yml
+user: test
+ip: 192.168.224.10
+dir: /etc/ansible
+
+例如：
+# mkdir roles/test/{vars,templates,files,tasks}  -p	# 创建一个测试工作路径
+
+# cd roles/
+
+# vim test/vars/main.yml			# 创建变量文件，将所有需要用到的变量都写入到这个文件（文件名固定）
+name: zhangsan
+age: 18
+
+# vim test/tasks/main.yml		# 创建剧本文件（文件名固定）
+- name: test
+  shell: echo '{{ name }} 的年龄是 {{ age }}' > /root/test.txt		# 此处的变量值由vars目录提供
+	
+# vim test.yml                                #test.yml文件可以放在任何路径上，ansible_playbook都可以执行
+---
+- hosts: client
+  remote_user: root
+  roles:
+  - test                                               #test是路径，表示需要执行的任务在roles/test下面。
+   
+# ansible-playbook test.yml		# 执行刚刚定义的剧本
+
+过程：
+test.yml --> /etc/ansible/roles/test/tasks/main.yml --> /etc/ansible/roles/test/vars/main.yml
+先去执行test/tasks/main.yml文件，执行过程有用到变量，
+然后又去roles/test/vars/main.yml文件找到变量的值。
+
+完成后到被管理机检查一下被管理机器上的文件即可
+
+# cat /root/test.txt
+zhangsan 的年龄是 18
+
+
+==========================================================
+
+
+练习：
+1、实现在被管理机器上批量添加用户
+# cat add_user.yml
+---
+- hosts: client
+  remote_user: root
+  tasks:
+  - name: add users
+    user: name={{ item }}        #默认是创建用户，所以不要指定状态。
+    with_items:
+      - test1
+      - test2
+      - test3
+      - test4
+	  
+2、实现在被管理机器上批量删除用户
+# cat del_user.yml
+---
+- hosts: client
+  remote_user: root
+  tasks:
+  - name: del users
+    user:
+      name: "{{ item }}"              # 这种模式需要加双引号""   name={{ item }}  这种不用加
+      state: absent                                    #指定状态，删除用户
+      remove: yes                                        # 删除家目录，相当于 -R
+    with_items:
+      - test1
+      - test2
+      - test3
+      - test4
+
+3、实现在被管理机器上批量安装httpd服务并启动
+# cat install_http.yml
+---
+- hosts: client
+  remote_user: root
+  vars:
+    rpm: http*
+  tasks:
+  - name: install http                            #第一个模块的名字，可以多个模块，需要重新定义名字。
+    yum:                                                #yum模块
+      name: "{{ rpm }}"
+      state: installed                               #状态是安装
+  - name: start httpd                          #第二个模块的名字，
+    service:                                           #service模块
+      name: httpd                                #管理httpd
+      state: started                              #指定状态是启动
+
+
+http://www.yamllint.com/		# 这是一个测试yaml语法格式的网站
+
+
+==========================================================
+
+
+templates目录介绍与使用实例：
+
+templates 模板文件目录，也可称为可变文件目录或动态文件目录，用于存放某些内部数据随时会发生变化的文件
+
+# tree
+.
+├── test
+│   ├── files
+│   ├── tasks
+│   │   └── main.yml
+│   ├── templates
+│   │   └── test.j2
+│   └── vars
+│       └── main.yml
+└── test.yml
+
+
+# cat vars/main.yml 	# 定义变量目录
+user: zhangsan
+pass: 123
+
+# cat templates/test.j2 	# 可变文件，其中引用了两处变量文件名随意
+	username={{ user }}
+	password={{ pass }}
+
+
+# cat tasks/main.yml		# 定义动作的yml文件
+- name: copy configfile to nodes
+  template:
+    src: test.j2			# 源文件
+    dest: /tmp/test.conf	# 目标地址及目标文件名称
+
+# cat test.yml                   
+- hosts: client
+  remote_user: root
+  roles:
+    - test
+
+# ansible-playbook test.yml	
+......
+
+查看结果
+# ansible client -m shell -a 'cat /tmp/test.conf'
+192.168.224.12 | SUCCESS | rc=0 >>
+username=zhangsan			--注意这两行的结果
+password=123
+
+192.168.224.11 | SUCCESS | rc=0 >>
+username=zhangsan
+password=123
+
+说明：template模块类似于copy模块，但使用template时，会自动判断文件是否存在，如果存在，且两个文件内容一致，则不拷贝，且可以在拷贝过程中使用vars中设置的变量
+使用copy模块运行的结果：
+vim /etc/ansible/roles/test/tasks/main.yml
+
+- name: copy
+  copy:
+    src: templates/test.j2
+    dest: /tmp/test.conf
+
+ansible-playbook test.yml
+
+[root@server ~]# ansible client -m shell -a 'cat /tmp/test.conf'
+192.168.224.12 | SUCCESS | rc=0 >>
+username={{ user }}
+password={{ pass }}
+
+192.168.224.11 | SUCCESS | rc=0 >>
+username={{ user }}
+password={{ pass }}
+
+-----------------------------------------------
+
+练习：
+
+提示：为达到练习效果，请勿投机取巧使用shell脚本实现以下练习
+
+1、要求使用ansible实现在被管理机器上批量添加十个用户
+要求：
+	1.用户名随意
+	2.前五个用户shell类型为/bin/bash，后五个用户的shell类型为/bin/sh
+# cat useradd.yml
+---
+- hosts: client
+  remote_user: root
+  vars:
+    userhead: test
+    shell1: /bin/bash
+    shell2: /bin/sh
+  tasks:
+  - name: add users
+    user:
+      name: "{{ item.username }}"
+      shell: "{{ item.shell }}"
+    with_items:
+      - { username: "{{ userhead }}1", shell: "{{ shell1 }}" }
+      - { username: "{{ userhead }}2", shell: "{{ shell1 }}" }
+      - { username: "{{ userhead }}3", shell: "{{ shell1 }}" }
+      - { username: "{{ userhead }}4", shell: "{{ shell1 }}" }
+      - { username: "{{ userhead }}5", shell: "{{ shell1 }}" }
+      - { username: "{{ userhead }}6", shell: "{{ shell2 }}" }
+      - { username: "{{ userhead }}7", shell: "{{ shell2 }}" }
+      - { username: "{{ userhead }}8", shell: "{{ shell2 }}" }
+      - { username: "{{ userhead }}9", shell: "{{ shell2 }}" }
+      - { username: "{{ userhead }}10", shell: "{{ shell2 }}" }
+
+
+2、使用 ansible 实现在被管理机器上安装并启动mariadb
+要求：
+	1.将数据目录指定为/data/mysql
+	2.将默认监听端口修改为3307
+	3.修改完成后启动mariadb
+cd /etc/ansible/roles/
+mkdir install_mariadb/{files,tasks,templates,vars}  -p
+# tree /etc/ansible/roles/install_mariadb
+.
+├── files
+├── install_mariadb.yml
+├── tasks
+│   └── main.yml
+├── templates
+│   └── my.cnf
+└── vars
+    └── main.yml
+
+# cat install_mariadb.yml			--开头文件
+---
+- hosts: client
+  remote_user: root
+  roles:
+  - install_mariadb
+  
+# cat tasks/main.yml				--安装剧本
+- name: install mariadb
+  yum:
+    name: "{{ item }}"
+    state: installed
+  with_items:
+    - mariadb-devel
+    - mariadb-server
+    - mariadb-*
+- name: copy config file                    #第二模块，传送配置文件
+  template:
+    src: my.cnf                                      #templates/my.cnf文件
+    dest: /etc/my.cnf
+- name: create users                          #第三模块，创建用户，
+  user:
+    name: "{{ username }}"
+    shell: /sbin/nologin
+- name: create datadir and logdir       #第四模块，创建数据目录和日志目录
+  file:
+    name: "{{ item }}"
+    state: directory
+    owner: "{{ username }}"                   #创建目录的所属用户mysql
+    group: "{{ username }}"                  #创建目录的所属组mysql
+  with_items:
+    - "{{ datadir }}"
+    - "{{ logdir }}"
+- name: start mariadb                  #第五模块，启动服务
+  service:
+    name: mariadb
+    state: started
+
+# cat vars/main.yml				--定义变量
+port: 3307
+username: mysql
+datadir: /data/mysql
+socket: "{{ datadir }}/mysql.sock"
+pidfile: "{{ datadir }}/mysql.pid"
+logdir: /var/log/mysql
+logfile: "{{ logdir }}/mysql-err.log"
+
+# cat templates/my.cnf			--配置文件
+[mysqld]
+user={{ username }}
+port={{ port }}
+datadir={{ datadir }}
+socket={{ socket }}
+pid-file={{ pidfile }}
+log-error={{ logfile }}
+
+[mysqld_safe]
+pid-file={{ pidfile }}
+log-error={{ logfile }}
+
+[client]
+socket={{ socket }}
+
+注意： 如果报这种错误，通过很久的排查，是vars/main.yml 变量名和templates/my.cnf的
+变量名不一样，导致读取变量值出错。port={{3307}} 写成 prot={{3307}} .
+TASK [intest : screipt file] ****************************************************************
+fatal: [192.168.224.13]: FAILED! => {"changed": false, "msg": "AnsibleUndefinedVariable: 'port' is undefined"}
+
+
+3、mariadb是rpm版本的，固然简单些，那如果让你使用ansible批量部署二进制版本的mysql呢？
+要求：使用ansible先批量卸载被管理机器上的mariadb，然后在批量部署好二进制版本的mysql，版本不限！
+   先卸载之前装的mariadb
+vim remove_mariadb.yml
+---
+- hosts: client
+  remote_user: root
+  tasks:
+  - name: stop mariadb
+    service:
+      name: mariadb
+      state: stopped
+  - name: remove mariadb
+    yum:
+      name: mariadb*
+      state: removed
+
+
+# tree /etc/ansible/roles/install_mysql
+.
+├── files
+│   └── mysql-8.0.15-el7-x86_64.tar.gz
+├── install_mysql.yml
+├── tasks
+│   └── main.yml
+├── templates    
+│   ├── my.cnf
+│   
+└── vars
+    └── main.yml
+
+# cat install_mysql.yml                    # 开头文件
+---
+- hosts: client
+  remote_user: root
+  roles:
+  - install_mysql
+  
+#cd /etc/ansible/roles/
+mkdir install_mysql/{files,tasks,templates,vars}  -p
+
+# cat tasks/main.yml                              #剧本内容
+- name: unarchive mysql
+  unarchive:
+    src: mysql-8.0.15-el7-x86_64.tar.gz
+    dest: "{{ tardir }}"
+- name: rename mysqldir
+  shell: "mv {{ tardir }}/mysql* {{ tardir }}/mysql"
+- name: create users
+  user:
+    name: "{{ username }}"
+    shell: /sbin/nologin
+- name: create dirs
+  file:
+    name: "{{ item }}"
+    state: directory
+    owner: "{{ username }}"
+    group: "{{ username }}"
+  with_items:
+    - "{{ datadir }}"
+    - "{{ logdir }}"
+    - "{{ configdir }}"
+- name: copy config file
+  template:
+    src: my.cnf
+    dest: "{{ configdir }}/my.cnf"
+- name: init mysql
+  shell: '"{{ basedir }}"/bin/mysqld --initialize --user="{{ username }}" --basedir="{{ basedir }}" --datadir="{{ datadir }}"'
+- name: copy mysql start file
+  shell: "cp /usr/local/mysql/support-files/mysql.server /etc/init.d/mysqld"
+- name: sed 46s
+  shell: "sed -i 46cbasedir=/usr/local/mysql /etc/init.d/mysqld"
+- name: sed  47s
+  shell: "sed -i 47cdatadir=/data /etc/init.d/mysqld"
+- name: sed 207s
+  shell: "sed -i 207c'conf=$basedir/etc/my.cnf' /etc/init.d/mysqld"
+- name: start mysql
+  shell: /etc/init.d/mysqld start
+  
+  
+# cat vars/main.yml                     #变量文件 
+port: 3308
+username: mysql
+datadir: /data/mysql80
+socket: "{{ datadir }}/mysql80.sock"
+pidfile: "{{ datadir }}/mysql80.pid"
+logdir: /var/log/mysql
+logfile: "{{ logdir }}/mysql80-err.log"
+basedir: "{{ tardir }}/mysql"
+tardir: /usr/local
+configdir: "{{ basedir }}/etc/"
+
+# cat templates/my.cnf               #定义配置文件可动态远程复制
+[mysqld]
+user={{ username }}
+port={{ port }}
+datadir={{ datadir }}
+socket={{ socket }}
+pid-file={{ pidfile }}
+log-error={{ logfile }}
+
+[mysqld_safe]
+pid-file={{ pidfile }}
+log-error={{ logfile }}
+
+[client]
+socket={{ socket }}
+
+
+  现在yml剧本已经完善了，不需要这步了，=》切换到192.168.224.11被管理的机器上，把mysql.server文件复制过来。 再修改几个参数
+scp /usr/local/mysql/support-files/mysql.server root@192.168.224.10:/etc/ansible/roles/install_mysql/templates/mysql.server
+
+vim templates/mysql.server
+.....
+basedir=/usr/local/mysql
+        datadir=/data
+
+:207行        conf=$basedir/etc/my.cnf
+.....
+
+运行剧本
+ansible-playbook install_mysql.yml
+查看初始密码
+ansible client -m shell -a 'cat /var/log/mysql/mysql80-err.log |grep password'
+
+修改初始密码
+
+ansible client -m shell -a "/usr/local/mysql/bin/mysqladmin -u root password 'Mysql137#$' -p123"
+-p 后面输入初始密码
+
+登录mysql
+/usr/local/mysql/bin/mysql -pMysql137#$
+
+
+
+

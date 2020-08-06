@@ -1,0 +1,406 @@
+
+无人值守安装（自动按定制的需求来批量安装linux系统)
+
+
+kickstart (pxe+nfs/http/ftp+dhcp+tftp+ks.cfg)
+
+cobbler
+
+
+linux安装系统的方法:
+1,光盘	     把iso镜像刻录（windows下有类似nero这类软件)到光盘里，通过光驱，再修改BIOS第一启动顺序为光驱进行安装
+2,u盘　　　　把iso镜像刻录（windows下有类似nero这类软件)到U盘里（具体过程请上网自已查)，通过USB接口，再修改BIOS第一启动顺序为U盘进行安装
+3,硬盘	　　 在linux硬盘上有iso镜像，可以通过grub进行硬盘安装第二个操作系统,或者重装系统（只重格根分区，不要重格iso所在的分区)
+4,网络
+
+
+===============================================================================
+
+
+				安装服务器
+
+  
+ 		pc1	pc2	pc3	pc4	pc5  ......
+
+
+
+客户端只需要网卡支持pxe就可以了
+
+基于pxe(preboot execute environment)技术
+pxe是intel公司的技术，工作server/client的网络模式，支持客户端从服务端下载软件，再使用tftp(trival  file tranfer protocol) 协议下载一个启动软件包到客户端内存中执行。
+
+
+tftp	简单文件传输协议，提供简单的，不可靠的文件传输。基于UDP的69端口。
+
+
+
+服务器端要求的技术和服务：
+
+1。nfs服务器或者用http,ftp三种协议之一  （共享安装光盘目录文件）
+2。tftp服务器	--共享启动相关文件
+3。dhcp服务器	--客户端获取IP，网关，DNS指向，主机名，NIS域，NTP
+4。kickstart程序生成的ks.cfg配置文件（此文件就定义了安装系统如何分区，如何格式化，root密码，时区，选择安装包等等） 取一个安装名字，可以由客户端自动选择是否用此安装名安装
+
+
+满足上面的1，2，3三点，就是手动网络安装服务器  
+
+
+客户端(支持pxe的网卡）选择网络启动－－通过dhcp获取IP可以和服务器通迅－－通过tftp下载系统引导文件－－按照ks.cfg配置文件里的方式来自动安装操作系统－－在安装最后一步要安装软件包，会按照ks.cfg里配置的软件包来安装
+
+
+==============================================================================
+
+
+
+为了防止dhcp服务器冲突（大家不要在桥接网络内做dhcp服务器)
+
+kvm的同学请使用私有网络
+
+
+
+
+					cobbler server    -------    client
+					3.3.3.4/24
+
+
+第一步:
+先安装cobbler相关软件包 (需要epel源,local源,centos163源；但因为需要用私有网络来做实验，但私有网络又不能和我的共享源连接，所以先可以使用桥接网络把下面的包装上，再换成私有网络)　　
+# yum -y install epel-release
+
+# yum install cobbler cobbler-web tftp tftp-server rsync xinetd httpd httpd-devel httpd-tools syslinux dhcp dhcp-common dhcp-libs pykickstart fence-agents debmirror system-config-kickstart -y
+
+
+第二步:启动服务，并使用cobbler check查询哪些需要修改
+
+# systemctl restart cobblerd.service
+# systemctl restart httpd.service 
+# systemctl enable cobblerd.service
+# systemctl enable httpd.service
+
+
+# cobbler check			--这一步可以帮助你查看cobbler有哪些需要配置
+
+=====================================================================
+
+The following are potential configuration items that you may want to fix:
+
+1 : The 'server' field in /etc/cobbler/settings must be set to something other than localhost, or kickstarting features will not work.  This should be a resolvable hostname or IP for the boot server as reachable by all machines that will use it.
+2 : For PXE to be functional, the 'next_server' field in /etc/cobbler/settings must be set to something other than 127.0.0.1, and should match the IP of the boot server on the PXE network.
+3 : SELinux is enabled. Please review the following wiki page for details on ensuring cobbler works correctly in your SELinux environment:
+    https://github.com/cobbler/cobbler/wiki/Selinux
+4 : change 'disable' to 'no' in /etc/xinetd.d/tftp
+5 : Some network boot-loaders are missing from /var/lib/cobbler/loaders, you may run 'cobbler get-loaders' to download them, or, if you only want to handle x86/x86_64 netbooting, you may ensure that you have installed a *recent* version of the syslinux package installed and can ignore this message entirely.  Files in this directory, should you want to support all architectures, should include pxelinux.0, menu.c32, elilo.efi, and yaboot. The 'cobbler get-loaders' command is the easiest way to resolve these requirements.
+6 : enable and start rsyncd.service with systemctl
+7 : comment out 'dists' on /etc/debmirror.conf for proper debian support
+8 : comment out 'arches' on /etc/debmirror.conf for proper debian support
+9 : The default password used by the sample templates for newly installed machines (default_password_crypted in /etc/cobbler/settings) is still set to 'cobbler' and should be changed, try: "openssl passwd -1 -salt 'random-phrase-here' 'your-password-here'" to generate new one
+
+Restart cobblerd and then run 'cobbler sync' to apply changes.
+
+=====================================================================
+
+第三步:按照cobbler check对应的信息修改(配置cobbler)
+
+1.需修改/etc/cobbler/settings中的server字段，后面的IP修改为本机的IP
+# sed -i 384s/127.0.0.1/3.3.3.4/ /etc/cobbler/settings 
+
+2.需修改/etc/cobbler/settings中的next_server字段，后面的IP修改为本机的IP
+# sed -i 272s/127.0.0.1/3.3.3.4/ /etc/cobbler/settings
+
+3.如果启用了selinux请关闭
+# vim /etc/selinux/config
+SELINUX=disalbed
+
+# reboot		--重启系统
+
+4.将/etc/xinetd.d/tftp中的disabled = yes 修改为 = no
+# sed -i /disable/s/yes/no/ /etc/xinetd.d/tftp
+
+5.执行 cobbler get-loaders下载最新的引导程序
+# cobbler get-loaders
+
+6.启动rsync服务
+# systemctl start rsyncd
+# systemctl enable rsyncd
+
+7.注释/etc/debmirror.conf文件中的@dists="sid";选项
+
+8.注释/etc/debmirror.conf文件中的@arches="i386"选项
+
+9.执行"openssl passwd -1 -salt 'root' '123' 生成一个加密密码后替换(default_password_crypted:)该字段后方的内容
+# openssl passwd -1 -salt 'xcvsfdsdfwq' '123'
+
+# vim /etc/cobbler/settings			--在101行把上面产生的密码字符串粘贴到""里替代原来的字符串
+default_password_crypted: "$1$xcvsfdsd$cGxdcHuQGCnu5vJw5M7zX1"
+
+10.这一步是不做的，不报错也要，把配置文件里的manage_dhcp的值由0改为1，表示dhcp服务由cobbler来管理
+# sed -i 242s/0/1/ /etc/cobbler/settings
+
+
+# systemctl restart cobblerd.service
+
+# cobbler check
+No configuration problems found.  All systems go.	--搞定
+
+
+
+第四步:导入centos7.3的iso镜像
+
+# cobbler import --path=/yum/ --name=centos7.3		--这里/yum目录挂载了centos7.3的iso镜像，导入后会导到/var/www/cobbler/ks_mirror/目录里
+
+# cobbler validateks		查看导入过程是否有错误
+
+
+*********************************************************************************
+
+ProtocolError: <ProtocolError for 3.3.3.4:80/cobbler_api: 503 Service Unavailable>
+导入时，如果出现上面的报错信息，为selinx没关，关了重启服务器然后重试
+
+*****************************************************************************
+
+
+# cobbler distro list	--导入成功后，确认导入的镜像名
+   centos7.3-x86_64
+# cobbler profile list	--导入成功后，确认默认的profile名
+   centos7.3-x86_64
+
+
+一个名镜像名(distro)可以对应多个安装名(profile)
+
+
+第五步:修改dhcp配置
+# vim /etc/cobbler/dhcp.template　　--在此文件的第21行到第25行修改成你对应的网段和ip	
+
+subnet 3.3.3.0 netmask 255.255.255.0 {		# 设置dhcp服务器的网段
+     option routers             3.3.3.4;	# 指定路由地址
+     option domain-name-servers 3.3.3.4;	# 指定域名解析服务器
+     option subnet-mask         255.255.255.0;
+     range dynamic-bootp        3.3.3.100 3.3.3.128;	# 指定dhcp地址池
+	
+
+第六步:使用cobbler sync同步，并启动xinetd服务
+# cobbler sync
+# systemctl restart xinetd.service
+# systemctl enable xinetd.service
+
+
+
+第七步:新建另一个虚拟机（选择pxe安装，保证相同私有网络,并且最好2G内存,内存小的话会在安装时报空间不够的错误)，进行安装测试
+
+
+
+--如果网络引导不了，客户端虚拟机把启动顺序（优先网络启动)给调整一下
+
+
+备注：
+
+
+删除一个profile
+# cobbler profil remove --name=centos7
+
+
+=============================================================================
+
+
+
+
+
+自动安装我们已经实现了，但如何自定义我们想安装的profile
+
+重点就是你需要自定义一个ks文件
+
+
+自定义ks文件的方法
+1,如果你很熟悉此文件，直接拷别人的模版修改或者直接使用/root/anaconda-ks.cfg来修改
+2,使用一个图形工具system-config-kickstart来帮助你配置(下面我就是使用这种方法)
+
+
+# yum install system-config-kickstart		# 安装图形化配置工具，上方已经安装过了
+# system-config-kickstart	
+
+
+# vim /etc/yum.repos.d/local.repo    --这里有个小问题，需要把软件仓库里改成development，图形才能选择包，否则图形在选择软件包那一步看不到
+[development]
+name=development
+baseurl=file:///yum/
+enabled=1
+gpgcheck=0
+
+# system-config-kickstart		--使用该命令启动配置界面
+
+图形操作过程见笔记里的截图system-config-kickstart01.png －－－》 system-config-kickstart14.png
+
+# cat /root/ks.cfg 
+#platform=x86, AMD64, or Intel EM64T
+#version=DEVEL
+# Install OS instead of upgrade
+install
+# Keyboard layouts
+keyboard 'us'
+# Root password
+rootpw --iscrypted $1$DCea3IWe$3gkPlrOIyPNkFu6E6keBA/
+# Use network installation
+url --url="http://192.168.1.188/cobbler/ks_mirror/centos7.3/"
+# System language
+lang zh_CN
+# Firewall configuration
+firewall --disabled
+# System authorization information
+auth  --useshadow  --passalgo=sha512
+# Use graphical install
+graphical
+firstboot --disable
+# SELinux configuration
+selinux --disabled
+
+# Network information
+network  --bootproto=dhcp --device=eth0
+# Reboot after installation
+reboot
+# System timezone
+timezone Asia/Shanghai --isUtc
+# System bootloader configuration
+bootloader --append="rhgb quiet" --location=mbr
+# Clear the Master Boot Record
+zerombr
+# Partition clearing information
+clearpart --all --initlabel
+# Disk partitioning information
+part /boot --fstype="xfs" --size=200
+part swap --fstype="swap" --size=8000
+part / --fstype="xfs" --size=102400
+part /data --fstype="xfs" --grow --size=1
+
+
+%packages
+@additional-devel
+@desktop-debugging
+@development
+@fonts
+@gnome-desktop
+@input-methods
+@kde-desktop
+@legacy-x
+@platform-devel
+@remote-desktop-clients
+@x11
+initial-setup
+initial-setup-gui
+vinagre
+tigervnc
+firefox
+net-tools
+wget
+elinks
+vim-enhanced
+
+
+%end
+
+
+=========================================================================
+
+
+# cobbler profile help	--查看帮助
+# cobbler profile list	--查看有哪些profile
+   centos7.3-x86_64	
+
+
+# cobbler profile report --name=centos7.3-x86_64 |grep Kickstart
+Kickstart                      : /var/lib/cobbler/kickstarts/sample_end.ks  --这就是这个安装方案的kickstart文件
+Kickstart Metadata             : {}
+
+
+
+我现在想自己把上面我们做好的ks.cfg文件做成一个profile
+步骤如下:
+第一步:
+把用system-config-kickstart做好的ks文件mv移到cobbler存放ks文件的目录中，并取一个不同的名称
+# mv /root/ks.cfg /var/lib/cobbler/kickstarts/centos7.3.ks
+
+
+
+步骤二:把准备好的ks文件做成一个新的profile
+# cobbler profile add --name=new_centos7.3 --distro=centos7.3-x86_64  --kickstart=/var/lib/cobbler/kickstarts/centos7.3.ks
+
+# cobbler profile list		--在原来基础上就多了自定义的安装方案
+   centos7.3-x86_64
+   new_centos7.3
+
+
+
+# systemctl restart cobblerd
+# cobbler sync
+# systemctl restart xinetd
+
+
+
+
+步骤三:
+测试
+然后就可以新建一个客户端虚拟机，使用上面的new_centos7.3安装名字来测试了
+
+
+============================================================================
+
+
+实现全自动安装：（免除选择安装按键）
+# vim /var/lib/tftpboot/pxelinux.cfg/default
+
+DEFAULT menu
+PROMPT 0
+MENU TITLE Cobbler | http://cobbler.github.io/	# 后面的网址可以换成自定义的内容，没什么卵用
+TIMEOUT 1			# 设置目录等待时间，超过该时间将自动进入下方定义的选项
+TOTALTIMEOUT 6000
+ONTIMEOUT centos7.3-x86_64		# 设置等待时间超时后自动进入的标签，具体选择视情况而定
+        kernel /images/centos7.3-x86_64/vmlinuz
+	
+LABEL local			# 标签1；使用本地磁盘启动
+        MENU LABEL (local)
+        MENU DEFAULT
+        LOCALBOOT -1
+
+LABEL centos7.3-x86_64	# 标签2；使用自定义镜像安装；标签可以有多个
+        MENU LABEL centos7.3-x86_64
+        append initrd=/images/centos7.3-x86_64/initrd.img ksdevice=bootif lang=  kssendmac text  ks=http://3.3.3.3/cblr/svc/op/ks/profile/centos7.3-x86_64
+        ipappend 2
+
+
+
+MENU end
+
+
+
+
+
+==================================================================
+
+对上面操作的扩展(仅供参考）
+# cobbler profile edit --name=new_centos7.3 --kickstart=/var/lib/cobbler/kickstarts/xxx.ks    (表示把new_centos7.3这个安装profile换一个新的ks文件) 
+
+# cobbler distro remove --name=centos73-x86_64	(表示删除一个distro)
+
+# cobbler profile remove --name=new_centos7.3	(表示删除这个叫new_centos7.3安装profile)
+
+==========================================================================
+
+客户端使用koan与服务器的cobbler联系，实现自动重装系统
+
+客户端需要安装koan软件包(需要local源和epel源)
+# yum install koan
+
+
+上面的工作准备好后，如果一个系统需要重装，那么需要执行下面的命令就可以（此系统现在要硬盘优先启动，而不是网络优先启动）
+# koan --server=3.3.3.4 --list=profiles	   --3.3.3.4为cobbler服务器IP，得到的结果和在cobbler服务器上cobbler profile list命令得到的结果一样
+   centos7.3-x86_64
+   new_centos7.3
+
+
+# koan --replace-self --server=3.3.3.4 --profile=new_centos7.3  --指定本客户端按照名为new_centos7.3的profile重装系统
+
+# reboot  --敲完上面的命令，使用reboot，就会重装了（没敲上面的命令那reboot就是重启）
+
+
+===========================================================================
+
+

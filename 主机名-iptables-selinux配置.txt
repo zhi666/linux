@@ -1,0 +1,53 @@
+如何将windows主机的文件通过xshell上传到你的linux主机上
+# yum install -y lrzsz		--安装一个软件包
+
+# rz		--上传数据至linux系统
+
+# sz filename	--下载数据之windows系统
+
+配置主机名：
+# vim /etc/hostname
+server.com		--换成你自己想要的主机名
+
+# hostname server.com	--和上方一样的主机名即可
+
+配置完成后重新打开一下终端即可生效
+
+======================================================
+
+绑定hosts文件
+# vim /etc/hosts
+上面的两行为默认的，这两行是千万不能删除的
+
+192.168.1.3	server.com		IP在前，主机名在后即可
+......
+
+写好保存退出即可，无需其它操作
+
+========================================================
+
+关闭selinux
+# vim /etc/selinux/config
+SELINUX=disabled		--该操作只能重启系统生效
+
+# setenforce 0 		--可以使用该命令临时关闭
+
+# getenforce 		--获取当前selinux状态
+只要不是enforcing就表示已经关闭了
+
+==========================================================
+
+清空防火墙规则和关闭firewall
+
+# iptables -F		--清空防火墙规则
+
+# systemctl stop firewalld	--停止firewalld服务
+
+# systemctl disable firewalld	--关闭firewall服务开机自启动
+
+===========================================================
+
+配置静态IP
+# vim /etc/sysconfig/network-scripts/ifcfg-ens33 
+
+

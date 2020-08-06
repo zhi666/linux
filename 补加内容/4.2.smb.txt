@@ -1,0 +1,289 @@
+﻿samba		--文件服务器 (公共使用的网络目录，供大家上传，下载，并做精细的权限控制）
+
+smb与ftp对比:
+1,smb不能直接跨公网，要借助类似vpn（virtual private network)这种方式
+2,smb对权限控制比ftp好，特别适用于在同一个目录里多个用户拥有不同权限的场合
+3,smb和ftp都能跨平台.(如果linux做服务器，windows做客户端，ftp不太适合电脑初级者使用，因为需要使用软件。而smb适合电脑初级都使用，我们可以帮他做服务器的磁盘映射，只要使用都会基本电脑操作就可以轻松实现上传下载）
+
+nfs:   linux to linux
+samba:  linux to windows 或linux to linux
+
+默认监听TCP的139,445端口
+
+
+smb服务的特点：
+1，能够支持更详细的访问控制
+2，能够跨平台（linux和windows）共享文件
+
+
+# yum install samba* -y 	安装
+
+smb的主配置文件解析：
+主配置文件路径：/etc/samba/smb.conf
+
+[global]							--定义samb全局的配置参数，其余的都是定义共享资源参数
+workgroup = MYGROUP					--定义服务器的工作组
+security = user	  					--定义工作模式
+工作模式介绍：samb4之前的版本有:user share server三种，smab4以后的版本已经弃用share和server两种模式
+
+目录共享相关参数：
+comment = Home Directories			--共享资源描述
+path = [dirname]					--共享资源路径
+guest ok = no/yes					--匿名用户是否可见共享资源
+browseable = no/yes					--是否列出该共享资源（可理解为是否隐藏共享资源名称）	
+writable = no/yes					--共享资源是否可写
+read only = no/yes					--共享资源是否只读（这两个参数只能使用其中一个）
+hosts deny = all					--拒绝哪些IP连接
+hosts allow = [IP]					--允许哪些IP连接
+directory mask = 0666				--新建目录时的权限
+create mask = 0444					--上传文件时的权限
+valid users = a,b					--允许读的用户列表
+write list = a						--允许写的用户列表
+
+# systemctl restart smb	启动服务
+
+# netstat -ntlup |grep bd	查看端口监听情况
+tcp        0      0 :::139                      :::*                        LISTEN      4507/smbd           
+tcp        0      0 :::445                      :::*                        LISTEN      4507/smbd    
+
+===============================================================================
+
+例一：smb客户端的访问（linux to linux）
+使用linux的客户端工具做测试：
+
+# smbclient -L //3.3.3.3 		--直接回车，表示以匿名用户登录，但没有看到共享资源，只有服务器的基本信息
+Enter SAMBA\root's password: 
+Anonymous login successful
+
+	Sharename       Type      Comment
+	---------       ----      -------
+	print$          Disk      Printer Drivers
+	IPC$            IPC       IPC Service (Samba 4.8.3)	
+......	
+
+使用“a”这个本地用户登录（本机上有这个用户）：
+# smbclient -L //3.3.3.3  -U a		--使用用户名登录，登录失败
+Password: 
+session setup failed: NT_STATUS_LOGON_FAILURE
+
+
+原因：
+1，使用用户登陆smb，指定访问用户需要密码
+2，samba账号有两个要求:
+	1）.要求登陆smb的用户必须是系统用户
+	2）.必须将系统用户通过命令加入到samba服务的用户中
+
+将本地用户“a”添加到sbm服务中（注意是在服务端做）：
+# smbpasswd -a a		
+New SMB password:		--输入密码
+Retype new SMB password:
+Added user a.			--添加成功
+
+smbpasswd的选项：
+	-a    添加smb用户
+	-d    禁用smb用户
+	-x    删除smb用户
+	-e    启用被禁用的smb用户
+
+
+# pdbedit -L
+
+# # smbclient -L //3.3.3.3  -U a
+Enter SAMBA\a's password: 			--输入上面设置的密码
+
+	Sharename       Type      Comment
+	---------       ----      -------
+	print$          Disk      Printer Drivers
+	IPC$            IPC       IPC Service (Samba 4.8.3)
+	a               Disk      Home Directories  --发现多了一个共享资源，共享资源名为用户名一样
+......
+
+# # smbclient //3.3.3.3/a  -U a			--上面是列出列表，现在才是登陆smb
+Enter SAMBA\a's password: 
+Try "help" to get a list of possible commands.
+smb: \> pwd								--查看当前登录的目录
+Current directory is \\3.3.3.3\a\
+smb: \> ?								--帮助（和ftp大致一样）
+smb: \> help get						--查看get命令的帮助	
+smb: \> ls								--列出当前目录内容
+smb: \> put install.log					--从本地上传文件之smb
+putting file install.log as \install.log (966.9 kb/s) (average 966.9 kb/s)
+smb: \> get vvv							--从smb下载文件到本地
+getting file \vvv of size 0 as vvv (0.0 kb/s) (average 0.0 kb/s)
+smb: \> rm vvv							--从smb删除文件
+smb: \> rename install.log install		--重命名smb中的文件
+
+mget	批量下载
+mput	批量上传
+
+
+==========================================================================
+
+例二：客户端连接测试
+
+1.测试默认用户家目录
+# smbclient -L //3.3.3.3 -U a	--测试系统用户
+# smbclient //3.3.3.3/a -U a		--使用a用户登陆，能够成功登陆
+
+
+smb客户端访问 (windows to linux)
+
+smb服务端配置完成后，打开【计算机 or 此电脑】 在上方地址栏中输入“\\3.3.3.3”（smb服务器的IP），这时会弹出一个输入用户名和密码的窗口，输入在服务器中添加好的用户名和对应的密码即可登录smb服务器。
+
+如果想在windows系统上实现开机自动挂载，管理员可以帮做一个映射:
+windows 7 ：右键点击“计算机” －－ 工具 －－ 映射网络驱动器 －－ 在文件夹那栏填上 \\3.3.3.3\a －－ 其他用户名 －－ 输入用户名和密码 －－ 就可以在“计算机”中看到
+
+windows 10: 右键点击“这台电脑” －－  映射网络驱动器 －－在文件夹那栏填上 \\3.3.3.3\a －－ 输入用户名和密码 －－ 就可以在“这台电脑”中看到
+
+注意：以上登陆后使用的均为对应用户的家目录（例如：a用户登陆后，使用的目录为/home/a）
+
+补充：
+cmd命令行中输入：net use * /del				--在windwos系统中清除已经连接的缓存
+
+
+2.创建基础共享资源
+服务端操作：
+# mkdir /test		--创建共享资源目录
+
+# vim /etc/samba/smb.conf
+[test]
+comment = test
+path = /test
+browseable = yes
+guest ok = no		--不允许匿名用户使用该共享资源
+read only = no
+
+# systemctl restart smb
+
+客户端测试：
+1.测试默认用户家目录
+# smbclient -L //3.3.3.3		--测试匿名用户，能看到
+# smbclient //3.3.3.3			--使用匿名用户登陆，无法登陆
+
+# smbclient -L //3.3.3.3 -U a	--测试系统用户
+# smbclient //3.3.3.3/test -U a		--使用a用户登陆，能够成功登陆
+
+
+==========================================================================
+
+
+例三：普通用户上传下载的讨论
+下载的条件:你登录的普通用户这个身份对要下载的文件有r权限就可以下载
+上传的条件:首先你登录的普通用户对系统的共享目录要有w权限，服务内也要定义writable=yes或read only = no
+# ll /test -d
+drwxr-xr-x 2 root root 32 5月  17 01:16 /test
+
+# smbclient //3.3.3.3/test -U a
+Enter SAMBA\a's password: 
+Try "help" to get a list of possible commands.
+smb: \> put a.txt
+NT_STATUS_ACCESS_DENIED opening remote file \a.txt		--无法上传，因为对目录没有写权限
+
+# chmod 777 /test		--将权限修改为所有用户可写即可
+
+
+==========================================================================
+
+
+例四.实现用户互相不能删除文件
+由例三可得知，如果用户对目录没有写权限，将无法上传文件，如果要想能够上传就必须为rwx权限，但如果这样，smb默认只要用户对共享资源目录有写权限，所有用户均可对目录内所有文件进行删除
+
+要实现不能删除别人上传的但可以删除自己上传的,解决方法：
+# chmod +t /test
+
+
+=======================================
+
+
+例五： create mask 和 directory mask 直接定义上传后的文件或者目录的权限
+
+[test]
+    comment = public for everyone
+    path = /test
+    browseable = yes
+    #read only = yes                            --注释掉，不能和 是否可写 同时存在
+    writeable = yes
+    create mask = 0444		--表示上传的文件权限为444(不指定默认为744）
+    directory mask = 0666	--表示创建的目录权限为666（不指定默认为755)
+
+# systemctl restart smb
+
+
+
+=======================================
+
+
+
+例六：实现a用户可以上传下载，b用户只能下载，拒绝匿名用户和其它用户(也用smbpasswd -a加入的用户)访问
+	valid users  = a,b,@group   	--只允许a,b用户和group组（只要属于这个组就可以，不一定要gid为这个组)访问
+	write list  = a，@group    	--允许写的用户列表
+
+[test]
+    comment = public for everyone
+    path = /test  
+    guest ok = no			--拒绝匿名用户，或者使用public = no
+writeable = no                  --拒绝所有用户写的权限 注释这条参数也可以，重启后也可以让下面的参数生效
+valid users = a,b
+    write list = a			--写列表只允许a用户写，表示只允许a用户上传
+ 
+# systemctl restart smb 修改配置上传（w权限）的参数需要重启才能生效
+
+
+# chmod 757 /test 
+测试
+
+
+=======================================
+
+
+例七:实现a用户可以上传下载，b用户只能下载，属于smb组的用户可以登录和上传下载，别的普通用户和匿名用户都拒绝
+
+public = no
+valid users = a,b,@smb
+write list = a,@smb
+
+[test]
+    comment = public for a,b,@smb
+    path = /test
+    public = no
+    valid users = a,b,@smb	--注意users不要写成user，@表示用户组
+    write list = a,@smb		--@也可以使用+
+
+
+# groupadd smb
+# useradd smb1 -g smb
+# useradd smb2 -g smb
+# smbpasswd -a smb1
+# smbpasswd -a smb2
+# id smb1
+uid=521(smb1) gid=521(smb) groups=521(smb)
+# id smb2
+uid=522(smb2) gid=521(smb) groups=521(smb)
+
+验证OK	
+
+
+
+
+
+例八：访问控制
+
+注意写到全局参数[global]下
+
+1,拒绝10.0.0网段
+hosts deny ＝ 10.0.0.
+
+1,拒绝10.0.0网段，但是允许10.0.0.35
+hosts deny ＝ 10.0.0.
+hosts allow = 10.0.0.35 
+
+2，拒绝所有，但允许10.0.0网段，但又不允许10.0.0.45
+hosts deny = all
+hosts allow = 10.0.0.  EXCEPT 10.0.0.45
+
+
+也可以写到单独的共享资源下，只针对此共享资源来进行访问控制
+
+
+
+

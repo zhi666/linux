@@ -1,0 +1,702 @@
+GIT简单说明
+
+从哪儿来？
+	GIT出生高贵，出自于LinusTorvalds之手，仅用了两个礼拜就给折腾出来了
+
+linus又是谁？
+
+
+有什么用？
+	Git是一个开源的分布式版本控制系统，用于敏捷高效地处理任何或小或大的项目。
+
+分布式版本控制系统又是啥？
+	我们自己平时写个“HelloWorld”程序，或者写一个只有几百行代码的小项目，不需要专门的代码管理工具，依靠自己的记忆就能把代码捋顺。
+	但是，一旦涉及到代码量巨大的项目，往往需要经过很多人协同工作数周乃至数月才能完成。
+	开发过程中，会面临着代码的修改、增删、恢复等工作，开发人员不可能清楚的记得每次变化，这时候就需要借助版本管理工具来跟踪代码的变化历程。
+	版本管理工具赋予每个文件一个版本号，每次修改之后，哪怕只改动了一个字母，版本管理工具都会精确地记录下来，并改变该文件的版本号。
+	这样，每个版本号就对应着文件的一次变化，依此可以进行文件的对比、恢复等操作。
+	
+	
+						缓存区				永久存放区
+	vim a.txt --->        add		 --->   	commit
+					 修改其中某一行		   修改其中某一行
+	
+	
+
+分布式版本控制系统都有哪些？
+SVN 
+VCS
+GIT
+......
+
+=====================================================================
+
+GIT的安装
+安装git及其依赖包
+# yum install -y curl-devel expat-devel gettext-devel openssl-devel zlib-devel git-core
+
+查看安装的GIT版本
+# git --version			 
+git version 1.8.3.1		# 能看到版本信息说明已经安装完成了
+
+=========================================================================
+
+GIT的配置文件：
+/etc/gitconfig		# 全局配置文件（主配置文件），对所有用户都有效的参数配置
+# git config --system 时使用该文件
+
+~/.gitconfig		# 局部配置文件，仅对当前用户有效的参数配置
+# git config --global 时使用该文件
+
+工作目录中的.git/config文件 # 该文件仅对当前工作目录有效，如果有该配置文件，则会覆盖以上两个文件的效果
+
+git的配置查找过程：./.git/config --> ~/.gitconfig --> /etc/gitconfig 
+
+# git config --list		# 列出当前git的所有配置详情（有时会出现重复选项，是来自于多个配置文件）
+
+
+GIT用户和email的设置：
+# git config --global user.name "username"
+# git config --global user.email "You are email!"
+
+=========================================================================
+
+GIT版本库的创建：
+先创建一个目录，用于当作git仓库使用
+# mkdir /testgit
+
+将刚刚创建的目录初始化为git仓库
+# cd /testgit
+# git init		# 将当期目录初始化为git仓库
+
+或者：
+# git init /testgit		# 将指定目录初始化为git仓库
+
+初始化完成后会在指定目录内自动生成一个.git目录，存放git必备的文件，该目录下文件请勿随意修改：
+# ls -a /testgit
+.  ..  .git
+
+==============================================================================
+
+GIT文件上传：
+
+备注：
+# git add filename 	# 添加一个文件到git版本库临时文件中，此时并未对版本库中的内容真正修改
+
+# git commit -m '备注信息'  # 提交刚刚添加的文件至版本库中，此时才会对版本库中的内容进行修改
+（注意：-m 后面的备注信息为自定义内容，为了后期更好查阅，该备注信息最好写上，而且最好写的详细些）
+
+例如：
+# echo 'test' >a.txt	# 创建一个即将上传的文件，内容自定义
+
+# git add a.txt	 # 将刚刚创建的文件添加到git的临时文件中
+(注意：切记，上传的文件必须在你创建的仓库目录中，否则将会报致命错误，可以多次add后再执行commit，每次可add多个文件，以空格为分隔符：# git add a.txt b.txt )
+
+# git commit -m "添加新文件a.txt" 	# 提交之前的所有操作,中文需中文字符的支持（新增文件、修改文件、删除文件）
+	# 位于分支 master
+	#
+	# 初始提交
+	#
+	......
+
+（此时将无法正常提交，因为我们还没有进行用户和email的设置）
+
+
+# git config user.name 'test'		# 为当前用户设置一个git帐号
+
+# git config user.email 'test@localhost'	# 为当前用户设置一个git帐号邮箱
+
+# git config --list		# 查看当前用户配置信息
+	user.name=test	# 帐号信息
+	user.email=test@localhost	# 邮箱信息
+	core.repositoryformatversion=0
+	core.filemode=true
+	core.bare=false
+	core.logallrefupdates=true
+
+# git commit -m '新增文件a.txt'		# 再次提交就可以成功了
+	[master（根提交） 61be9a1] test1
+	 1 file changed, 1 insertion(+)
+	 create mode 100644 1.txt
+
+
+=======================================================================
+
+
+GIT 之 “后悔药”
+
+# vim a.txt
+	test
+	test2		# 在a.txt文件中新增一行
+
+
+
+# git status	# 此时再来查看，系统便会提示有新的修改，但还没有提交
+	# 位于分支 master
+	# 尚未暂存以备提交的变更：
+	#   （使用 "git add <file>..." 更新要提交的内容）
+	#   （使用 "git checkout -- <file>..." 丢弃工作区的改动）
+	#
+	#	修改：      1.txt
+	#
+	修改尚未加入提交（使用 "git add" 和/或 "git commit -a"）
+
+
+
+# git diff a.txt	# 用diff的形式展示文件内容，以对比修改前和修改后的不同处
+	diff --git a/1.txt b/1.txt
+	index 9daeafb..259b241 100644
+	--- a/1.txt
+	+++ b/1.txt
+	@@ -1 +1,2 @@
+	 test
+	+test1		# 会告诉你，这里新增了一行内容
+
+如果该内容确实为你所需要修改的，就可以使用add来进行添加了，不过add只是添加进缓存，不会对版本库的内容修改，需要commit后才会
+
+
+# git add a.txt		# 将a.txt新增的内容添加进git的缓存中
+
+
+# git status		# 再次查看
+	# 位于分支 master
+	# 要提交的变更：
+	#   （使用 "git reset HEAD <file>..." 撤出暂存区）
+	#
+	#	修改：      1.txt
+	#
+	
+现在系统会提示你，之前的修改已经加入到缓存中了，但还未正式提交至版本库中，如果确认之前的修改没有问题，就可以进行commit操作了，将前面的修改提交至版本库中
+
+
+# git commit -m '修改a.txt，新增一行'		# 提交之前对a.txt的操作
+	[master a5178c8] 修改a.txt，新增一行
+	1 file changed, 1 insertion(+)
+ 
+ 
+# git status 	# 再次查看，又会提示工作区无内容，因为我们将所有操作都已经提交了，所以工作区现在为空
+	# 位于分支 master
+	无文件要提交，干净的工作区
+
+# git log		# 通过该命令，可以看到全部的git操作，包含版本号、提交用户信息、提交时间、备注
+	commit a5178c8db1d0d65fb2345dafd87a012451ffaad8
+	Author: test <test@localhost>
+	Date:   Fri Oct 5 17:00:59 2018 +0800
+
+		修改a.txt，新增一行		# 最近一次操作
+
+	commit 0a600a215dff87d5c4a554081082530ed24b1da0
+	Author: test <test@localhost>
+	Date:   Fri Oct 5 16:51:17 2018 +0800
+
+		添加新文件a.txt			# 第一次操作
+
+（在commit时，后面的备注信息都会记录到日志文件中，所以git默认是必须添加备注信息的）
+
+如果嫌上面的内容太过于冗长，可以使用：
+# git log --pretty=oneline			# 只显示版本号和备注信息
+	a5178c8db1d0d65fb2345dafd87a012451ffaad8 修改a.txt，新增一行
+	0a600a215dff87d5c4a554081082530ed24b1da0 添加新文件a.txt
+（备注：前面的一长串字符串为git的版本号；后面的为提交时所填写的备注信息）
+
+
+**************************************************************************************
+命令解析：
+# git log			# 查看git日志，可以看到都提交了哪些内容
+
+# git reset --hard HEAD^		# 回退到上一个版本（git会自动回到上一次提交前的版本）
+
+# git reset --hard [commit id]	# 回退到指定的版本（commit id可以通过：git log来确定）
+
+# git reflog		# 查看git所有做过的事情（如果之前的一次回退是错误的，需通过该命令来找回commit id）
+
+
+**************************************************************************************
+
+
+例如：
+# cat a.txt		# 当前a.txt有三行内容
+	test
+	test
+	test
+
+# git log 
+	commit 3a7c1eb28243b8ef7ffda0455b1c665bec15a2e4
+	Author: test <test@localhost>
+	Date:   Fri Oct 5 17:23:05 2018 +0800
+
+		第二次修改a.txt
+
+	commit a5178c8db1d0d65fb2345dafd87a012451ffaad8
+	Author: test <test@localhost>
+	Date:   Fri Oct 5 17:00:59 2018 +0800
+
+		修改a.txt，新增一行
+
+	commit 0a600a215dff87d5c4a554081082530ed24b1da0
+	Author: test <test@localhost>
+	Date:   Fri Oct 5 16:51:17 2018 +0800
+
+		添加新文件a.txt
+
+如果想回到“修改a.txt，新增第一行”的版本位置；
+# git reset --hard HEAD^  	# git将自动向下回退一个版本
+	HEAD 现在位于 a5178c8 修改a.txt，新增一行
+
+# cat a.txt	# 回退后a.txt回到了第二次修改前的样子
+	test
+	test
+# git log		# 回退后，日志信息也将发生变化
+	commit a5178c8db1d0d65fb2345dafd87a012451ffaad8
+	Author: test <test@localhost>
+	Date:   Fri Oct 5 17:00:59 2018 +0800
+
+		修改a.txt，新增一行
+
+	commit 0a600a215dff87d5c4a554081082530ed24b1da0
+	Author: test <test@localhost>
+	Date:   Fri Oct 5 16:51:17 2018 +0800
+
+		添加新文件a.txt
+
+如此时还想回退到“第二次修改a.txt”版本处，如果当前会话没有关闭，可以找到之前第二次修改的commit id来进行恢复：
+# git reset --hard	a5178c8		# commit id 不用写全，只写前面几位即可，git会自动补全，但不能太少位数
+	HEAD 现在位于 a5178c8 修改a.txt，新增一行
+	
+# cat a.txt	# 再次查看a.txt会发现又回到了第二次修改后的模样
+	test
+	test
+	test
+
+如果当前终端已经关闭，无法通过历史找回commit id，可以通过：
+# git reflog	# 查找历史操作记录来找回commit id
+	e87bbb6 HEAD@{0}: reset: moving to HEAD^		
+	d582500 HEAD@{1}: commit: 第二次修改a.txt
+	e87bbb6 HEAD@{2}: commit: 第一次修改a.txt
+	......
+（每次的操作都会记录下来，第一个字段即为该次操作的版本号）
+
+# git reset --hard e87bbb6		# 直接通过找到的版本号进行恢复
+	HEAD 现在位于 e87bbb6 第一次修改a.txt
+
+# cat a.txt 
+	test
+	test
+	test
+
+
+================================================================================
+
+工作区、缓存区的作用
+
+
+工作区(仓库目录)  add --> 缓存区（临时存放） commit -->  master(永久存放)
+
+由上可知：当我们对一个文件进行"git add filename"后，文件被修改的内容将存放至缓存区，不会直接修改master的内容，只有当"git commit"后，git才会将修改的内容写入到永久存放区；值得注意的是，git的特性为 管理文件的修改，而不是直接管理文件，所以，如果你进行了多次修改，都需要进行add才能将修改写入到缓存区；
+例如：
+
+# vim a.txt
+	test
+	test
+	test1
+	
+# git add a.txt
+	 
+# vim a.txt
+	test
+	test
+	test1
+	test2
+
+# git commit -m '第三次修改a.txt'
+	[master 2d5e028] 第三次修改a.txt
+	 1 file changed, 1 insertion(+)
+
+# git status
+	# 位于分支 master
+	# 尚未暂存以备提交的变更：
+	#   （使用 "git add <file>..." 更新要提交的内容）
+	#   （使用 "git checkout -- <file>..." 丢弃工作区的改动）
+	#
+	#	修改：      a.txt
+	#
+	修改尚未加入提交（使用 "git add" 和/或 "git commit -a"）
+
+提交后查看一下git的状态，你会发现，git还是提示a.txt有一次新的修改未被提交，因为最后一次修改后你并未重新提交，所以git没有将其写入缓存区
+
+# git diff HEAD -- a.txt	# 使用命令将工作区和当前版本库的内容进行对比一下，确实后面添加的一行没有提交
+	diff --git a/a.txt b/a.txt
+	index 0867e73..d0c7fbe 100644
+	--- a/a.txt
+	+++ b/a.txt
+	@@ -1,3 +1,4 @@
+	 test
+	 test
+	 test
+	+test
+		
+总结：如果你需要对工作区多个文件修改，那么请先将需要修改的都改好后，再进行add，然后commit，这样就可以省去多次add和提交了
+	
+=================================================================
+
+GIT之 撤销修改
+
+# vim a.txt
+	test
+	test
+	test
+	test
+	tset	
+	
+保存后发现刚刚新增的一行或者是修改的内容有错误，需撤销后重新编辑，这时可使用：
+
+
+# git checkout -- filename		#（当然，也可以直接手动修改文件内容）
+该命令会有两种恢复情况：
+1.如果修改后还未提交至缓存区，则将文件内容恢复到与版本库相同的状态
+2.如果修改前有过提交至缓存区，则恢复文件内容到和缓存区相同的状态
+
+例如，未add之前的撤销:
+# git checkout -- a.txt		# 注意：必须要有 -- 如果没有，则是另一个含义了
+
+# cat a.txt
+	test
+	test
+	test
+	test		# 之前新增的那行不见了
+	
+已经add之后的撤销：
+# git reset HEAD a.txt	# 将缓存区中保存的临时文件撤回到a.txt文件中
+	重置后撤出暂存区的变更：
+	M	a.txt
+
+# git checkout -- a.txt	# 在使用命令撤销文件修改过的内容即可
+
+# cat a.txt
+	test
+	test
+	test
+	test
+
+	
+问：如果不小心将错误的内容已经写入到了版本库，该如何恢复？
+# git reset --hard HEAD^ 
+			or
+# git reset --hard [commit id]
+		
+(注意：切记；上面的恢复仅限未推送到远程版本库，如果推送至远程版本库后，撤销起来将会非常麻烦)
+
+
+
+GIT之 删除文件与版本库文件
+一般情况下，有不需要的文件都是直接rm掉，git中也会监控文件的删除，如果有删除，git会告诉你都删除了哪些文件
+例如：
+# touch b.txt
+
+# git add b.txt
+
+# git commit -m '新建文件b.txt'
+
+# rm -f b.txt	# 直接将文件b.txt删掉
+
+# git status
+	# 位于分支 master
+	# 尚未暂存以备提交的变更：
+	#   （使用 "git add/rm <file>..." 更新要提交的内容）
+	#   （使用 "git checkout -- <file>..." 丢弃工作区的改动）
+	#
+	#	删除：      b.txt								# git会很明确的告诉你删除了哪个文件
+	#
+	修改尚未加入提交（使用 "git add" 和/或 "git commit -a"）
+
+该情况下，有两个选择，如果确实需要删掉该文件，可以使用以下命令将该文件从版本库也一起删掉：
+# git rm b.txt	# 从版本库也删除b.txt
+	rm 'b.txt	
+# git commit -m '删除文件b.txt'		# 将删除b.txt文件同步到版本库中
+	[master 95015c7] 删除文件b.txt
+	 1 file changed, 0 insertions(+), 0 deletions(-)
+	 delete mode 100644 b.txt	
+
+	 
+另一种情况就是，如果不小心删错了文件，该文件又必须得恢复：
+# git checkout -- b.txt		# 因为此时我们的版本库中还有b.txt文件存在，所以可以很轻松的就恢复了
+
+注意：如果你删掉文件后使用版本库进行恢复，恢复的内容为最近一次提交至版本库的版本，所以会丢失该版本库以后的内容
+
+
+===============================================================
+
+
+GIT之 远程版本库
+
+远程版本库分两种：
+1、别人提供的
+2、自己搭建的
+
+目前最主流的web远程版本库github与码云
+github注册及远程版本库创建过程详见Word文档"git工作原理图&github注册流程"；请下载后查看
+
+
+github远程版本库的使用方法：
+主要使用两种方式：
+1、https协议传输；该方式每次推送都需要验证帐号和密码，比较麻烦
+2、ssh协议传输；该方式直接通过ssh协议的密钥对进行验证，只需在github上配置好公钥即可；
+
+
+1、使用https推送的使用
+
+添加远程版本库，origin为你设置的远程库名称，可自定义，zstest换成你自己注册的用户名，test.git换成你自己的版本库名称
+# git remote add origin https://github.com/zstest/test.git		
+
+	
+将本地版本库中的内容全部推送至远程版本库；origin为刚刚添加时定义的版本库名称
+# git push -u origin master	
+	Username for 'https://github.com': zstest		# 输入注册的用户名
+	Password for 'https://ninmu@github.com': 		# 输入注册的用户密码
+	Counting objects: 3, done.	
+	Compressing objects: 100% (2/2), done.
+	Writing objects: 100% (2/2), 262 bytes | 0 bytes/s, done.
+	Total 2 (delta 0), reused 0 (delta 0)
+	To https://github.com/ninmu/one.git
+	   2502bb2..da8228c  master -> master
+	分支 master 设置为跟踪来自 origin_test 的远程分支 master。
+
+该方法比较繁琐，每次推送都需要验证用户名和密码
+
+
+2、使用ssh协议推送；配置过程请见Word文档"git工作原理图&github注册流程"
+按照word文档上配置完成后，即可开始添加远程版本库：
+
+# ssh-keygen –t  rsa –C  “你自己的邮箱地址”		# 产生ssh密钥对，输入命令后全部回车即可
+	Generating public/private rsa key pair.
+	Enter file in which to save the key (/root/.ssh/id_rsa): 
+	Created directory '/root/.ssh'.
+	Enter passphrase (empty for no passphrase): 
+	Enter same passphrase again: 
+	Your identification has been saved in /root/.ssh/id_rsa.
+	Your public key has been saved in /root/.ssh/id_rsa.pub.
+	The key fingerprint is:
+	0e:99:bf:a5:57:6c:a2:b1:96:5d:b7:d0:39:53:b5:2f 11842855@qq.com
+	The key's randomart image is:
+	+--[ RSA 2048]----+
+	|                 |
+	|                .|
+	|                o|
+	|       o       ..|
+	|      + S  . . o.|
+	|       +. . * E .|
+	|        o*.= o = |
+	|        =+o   .  |
+	|       .o.       |
+	+-----------------+
+	
+# cat ~/.ssh/id_rsa.pub 		# 将该文件的内容复制粘贴进github即可
+	ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDanYyhhV6+3vBUJp7VMDNevMColpKlz9TdJ/JIH1A8DieUly8WPyrXKhfaL74Umx7E0Qp6iKKxwb5v14kiebCq0hvqeBk5rm5sKRKj47A2AI1l3IfXpjmTbuvFtRiiPFsKDhHaHXrrCvmc3ebsGP5NEsTvuwHYVeGyPrWV6se0b7TmL/7SOm3GYiMSYNGA8B8179lDAwvN3fUPw3hHmj/Any2i5MeWf1xhhtfUdH1RRjgsbxJFM8Vp+M9II6yaNy4hZP5rX94Giu4c4DCWzL7D3w/I94QxmzOoaOOxFTSRiJr1VLRk6pOsbeOjy8wrLsbZSkhVWWIdHfMkdqHqYUxx 11842855@qq.com
+
+注意：添加时定义的远程版本库的名称不能重复
+# git remote add origin_1 git@github.com:test/test.git
+
+添加完成后即可开始进行推送任务
+# git push -u origin_1 master
+	......
+
+备注：第一次推送任务会将本地版本库中所有内容都推送过去，以后每次有修改都可以使用该命令进行推送
+
+===============================================================
+
+GIT 私有版本库之 GITLAB
+想要免费，且更加安全的私有版本库，只能自己搭建
+
+GITLAB是一款开源的分布式存储管理系统，可以让你自己也能轻松实现自己的git远程版本库，且可以免费拥有私有版本库
+
+Gitlab提供的功能：
+1、用户管理
+2、组管理
+3、私有版本库
+4、公开版本库等等
+
+Gitlab的安装过程：
+安装前准备：
+1、绑定主机名
+2、绑定hosts
+3、关闭iptables和selinux
+4、停止所有占用80和8080端口的服务
+
+1、下载软件包
+镜像源，下载偏慢
+# wget https://mirrors.tuna.tsinghua.edu.cn/gitlab-ce/yum/el7/gitlab-ce-10.0.6-ce.0.el7.x86_64.rpm
+
+因为我这里已经下载好了，所以大家就直接使用下面的下载命令即可
+# wget http://192.168.2.254/%e8%87%aa%e5%8a%a8%e5%8c%96/git/gitlab-ce-10.0.6-ce.0.el7.x86_64.rpm
+
+2、安装依赖
+# yum install -y curl policycoreutils-python openssh-server openssh-clients 
+
+3、开始安装Gitlab(使用本地rpm包安装)
+# yum localinstall -y gitlab-ce-10.0.6-ce.0.el7.x86_64.rpm
+	由于包比较大，所以安装过程会慢些
+
+4、修改Gitlab配置
+把13行后面的IP换成你自己的IP地址，否则后面添加用户时会出现无法设置密码的情况，IP前面必须有'http://'否则会报错
+# vim /etc/gitlab/gitlab.rb
+	13 external_url 'http://3.3.3.6'
+	以下为配置邮件服务的内容
+	在文件末尾添加以下内容：
+	gitlab_rails['smtp_enable'] = true
+	gitlab_rails['smtp_address'] = "smtp.qq.com"
+	gitlab_rails['smtp_port'] = 465
+	gitlab_rails['smtp_user_name'] = "******@qq.com"		--你的qq邮箱地址
+	gitlab_rails['smtp_password'] = "授权码"				--qq邮箱内获得	
+	gitlab_rails['smtp_domain'] = "smtp.qq.com"
+	gitlab_rails['smtp_authentication'] = "login"
+	gitlab_rails['smtp_enable_starttls_auto'] = true
+	gitlab_rails['smtp_tls'] = true
+	gitlab_rails['gitlab_email_from'] = "******@qq.com"		--你的qq邮箱地址
+
+
+
+gitlab_rails['smtp_enable'] = true
+gitlab_rails['smtp_address'] = "smtp.qq.com"
+gitlab_rails['smtp_port'] = 465
+gitlab_rails['smtp_user_name'] = "*******@qq.com"
+gitlab_rails['smtp_password'] = "授权码"
+gitlab_rails['smtp_domain'] = "smtp.qq.com"
+gitlab_rails['smtp_authentication'] = "login"
+gitlab_rails['smtp_enable_starttls_auto'] = true
+gitlab_rails['smtp_tls'] = true
+gitlab_rails['gitlab_email_from'] = "*******@qq.com"
+
+
+
+
+5、初始化Gitlab
+# gitlab-ctl reconfigure
+	过程比较慢
+echo $?
+6、启动Gitlab服务
+**********************************************
+gitlab服务管理命令：
+启动Gitlab服务		# gitlab-ctl start
+查看Gitlab的状态	# gitlab-ctl status
+停止Gitlab服务		# gitlab-ctl stop
+**********************************************
+
+7、查看端口监听情况
+# lsof -i:80	# Gitlab默认监听的端口为80和8080两个端口
+	COMMAND  PID       USER   FD   TYPE DEVICE SIZE/OFF NODE NAME
+	nginx   5453       root    7u  IPv4  38573      0t0  TCP *:http (LISTEN)
+	nginx   5454 gitlab-www    7u  IPv4  38573      0t0  TCP *:http (LISTEN)
+
+# lsof -i:8080
+
+
+8、启动后就可以到web浏览器输入你的IP地址进行下一步了；详情请参见“github与gitlab使用说明”word文档
+   默认登陆用户是root 
+9、安装完成后，打开浏览器，输入你的IP地址即可访问gitlab页面了
+
+
+
+
+
+Gitlab远程版本库的使用
+备注：Gitlab的使用过程和github和相似，都可以通过多种协议来进行推送和克隆
+
+1、http协议方式
+# git remote add origin https://IP/zstest/test.git
+
+2、ssh协议方式
+# ssh-keygen –t  rsa –C  “你自己的邮箱地址”		# 产生ssh密钥对，输入命令后全部回车即可
+
+# cat ~/.ssh/id_rsa.pub 		# 将该文件的内容复制粘贴进hub即可
+
+# git remote add origin_2 git@IP:test/test.git	# 添加远程版本库
+
+# git push origin_2 master		# 将本地版本库内容推送至你自己搭的远程版本库中
+
+
+-------------------------------------------------
+
+一台服务器如何使用多个远程版本库：
+
+**********************************************************************
+(备注：添加第二个sshkey之后必须将第二个版本库删除后重建才能正常推送)
+**********************************************************************
+
+注意：一个ssh_key只能提供一个版本库使用，如果一台服务器需要使用多个版本库，直接生成多个ssh_key即可：
+# ssh-keygen -t rsa -C '邮箱地址'
+Generating public/private rsa key pair.
+Enter file in which to save the key (/root/.ssh/id_rsa): /root/.ssh/gitlab_rsa		--设置不同文件名
+......
+
+# eval `ssh-agent -s`
+
+# ssh-add ~/.ssh/gitlab_rsa		--启用刚刚生成的新ssh_key
+
+上面的准备好后，直接将新的公钥内容复制进去即可
+
+----------------------------
+
+远程版本库的删除：
+# git remote 		--列出当前已添加的所有远程版本库信息
+
+# git remote -v 	--长格式列出当前的所有远程版本库信息
+
+# git remote remove test 	--删除远程版本库test
+
+-----------------------------------
+
+
+远程版本库的下载：
+
+# git clone git@IP:username/test.git		# 将指定服务器中的test远程版本库克隆到本地当前目录
+
+例如：
+# git clone git@3.3.3.8:root/test.git	# 将3.3.3.8上的test这个远程版本库克隆到本地，用户名 root
+
+
+========================================================
+本章总结
+
+本地版本库操作命令：
+# git init 						--初始化本地版本库
+
+# git add filename 				--添加文件进版本库
+
+# git commit -m '备注信息'		--提交文件进版本库永久存放区
+
+# git status 			--查看git版本库当前状态
+
+# git diff filename		--将本地版本库中的文件与版本库永久存放区中的文件进行对比
+
+# git log				--查看git操作日志
+
+# git reflog			--查看git历史操作（恢复版本时会用到）
+
+# git reset --hard HEAD^		--将本地版本库回退到上一个版本
+
+# git reset --hard [版本号]		--将本地版本库回退到指定版本
+
+# git checkout -- filename		--撤销上一次操作
+	该命令会有两种恢复情况：
+	1.如果修改后还未提交至缓存区，则将文件内容恢复到与版本库相同的状态
+	2.如果修改前有过提交至缓存区，则恢复文件内容到和缓存区相同的状态
+
+# git rm filename				--删除版本库永久存放区的指定文件
+
+远程版本库操作命令：
+# git remote 		--查看当前版本库已经添加的所有远程版本库
+
+# git remote -v		--长格式查看所有添加的远程版本库
+
+# git remote add [版本库名称] [链接地址]	--添加一个远程版本库
+
+# git remote remove [版本库名称]			--删除一个远程版本库
+
+# git push -u [版本库名称] [分支名称]		--将本地版本库内容推送到指定远程版本库
+
+# git clone [版本库链接地址]				--克隆(下载)一个远程版本库的内容到本地
+
+
+
+
+
