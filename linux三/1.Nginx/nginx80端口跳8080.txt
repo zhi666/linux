@@ -1,0 +1,36 @@
+
+nginx本机80跳转8080
+
+
+
+http {
+  upstream  myserver { 
+                server  192.168.233.201:80;        #本机ip地址
+        }
+
+server {
+               listen 80;
+               server_name  localhost;
+               root   html;                                          #nginx网站路径，默认/usr/local/nginx/html
+               index  index.html index.htm index.php;
+
+               location ~ \.php$ {
+               root           html;                                 #nginx网站路径默认，如果是其它路径，需修改此项
+              fastcgi_pass   127.0.0.1:9000;
+              fastcgi_index  index.php;
+              fastcgi_param  SCRIPT_FILENAME  $document_root$fastcgi_script_name; 
+              include        fastcgi_params;
+      }
+  }
+
+
+     server {                   #手动添加一个server
+              listen    8080;
+              location / {
+              proxy_pass http://myserver; 
+              proxy_set_header   Host             $host;
+              proxy_set_header   X-Real-IP        $remote_addr;
+              proxy_set_header   X-Forwarded-For  $proxy_add_x_forwarded_for;
+        }
+}
+}

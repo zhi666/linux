@@ -1,0 +1,358 @@
+--
+
+
+
+lamp --> lnmp
+
+apache-->nginx (engine X)
+
+
+
+查看各大网站使用的web服务器，使用下面的命令
+curl -I www.sina.com.cn    
+
+iMac:~ jim$ ssh root@192.168.224.10
+root@192.168.224.10's password: 
+Last login: Sat Oct 13 09:12:28 2018 from 192.168.224.1
+[root@server ~]# ls
+anaconda-ks.cfg  initial-setup-ks.cfg  original-ks.cfg
+[root@server ~]# curl -I www.sina.com.cn 
+HTTP/1.1 302 Moved Temporarily
+Server: nginx
+Date: Wed, 05 Dec 2018 07:26:17 GMT
+Content-Type: text/html
+Content-Length: 154
+Connection: keep-alive
+Location: https://www.sina.com.cn/
+X-Via-CDN: f=edge,s=ctc.xiamen.ha2ts4.43.nb.sinaedge.com,c=113.97.28.175;
+X-Via-Edge: 1543994777299af1c61713cd64cde6aac49cc
+
+结论：现在大型网站几乎统一都使用nginx或nginx做二次开发的版本(如tengine,OpenResty等)
+
+
+
+nginx相对于apache的优势?
+资源占用少
+支持大并发
+
+
+
+================================================================================================
+
+
+
+centos7.3平台下rpm版单机lnmp的搭建
+第一步:准备
+1,主机名
+2,关闭firewalld,selinux
+
+
+
+
+
+第二步:安装lnmp相关的rpm包
+# yum -y install epel-release (epel库，nginx需要)
+# yum install mariadb mariadb-server php php-mysql php-gd libjpeg\* php-ldap php-odbc php-pear php-xml php-xmlrpc php-mbstring php-bcmath php-mhash php-fpm php-pecl-zendopcache nginx -y
+
+
+
+
+第三步:
+启动mariadb，并登录验证
+# systemctl start mariadb.service
+# systemctl enable mariadb.service
+# systemctl status mariadb.service
+
+
+# mysql		--登录确认能使用
+MariaDB [(none)]> quit	--quit退出
+
+
+第四步:确认php安装模块(modules)，并按需求进行模块的增加或删除,对php配置文件进行优化（可选)
+# php -m		--查看已经安装的php模块，如果还有需要的模块没有安装，则使用yum install php-xxx去安装相应的模块
+[PHP Modules]
+bcmath
+bz2
+calendar
+Core
+ctype
+curl
+date
+dom
+ereg
+exif
+fileinfo
+filter
+ftp
+gd
+gettext
+gmp
+hash
+iconv
+json
+ldap
+libxml
+mbstring
+mhash
+mysql
+mysqli
+odbc
+openssl
+pcntl
+pcre
+PDO
+pdo_mysql
+PDO_ODBC
+pdo_sqlite
+Phar
+posix
+readline
+Reflection
+session
+shmop
+SimpleXML
+sockets
+SPL
+sqlite3
+standard
+sysvmsg
+sysvsem
+sysvshm
+tokenizer
+wddx
+xml
+xmlreader
+xmlrpc
+xmlwriter
+xsl
+Zend OPcache
+zip
+zlib
+
+[Zend Modules]
+Zend OPcache
+
+
+# ls /usr/lib64/php/modules/	--所有安装的模块路么都在此目录下
+bcmath.so    json.so      odbc.so       pdo_sqlite.so  sysvsem.so    xmlwriter.so
+curl.so      ldap.so      opcache.so    phar.so        sysvshm.so    xsl.so
+dom.so       mbstring.so  pdo_mysql.so  posix.so       wddx.so       zip.so
+fileinfo.so  mysqli.so    pdo_odbc.so   sqlite3.so     xmlreader.so
+gd.so        mysql.so     pdo.so        sysvmsg.so     xmlrpc.so
+
+
+/etc/php.ini	--php主配置文件，如果要进行相应的优化修改或者是以源码编译的方式编出的模块需要加到php里的都需要修改此配置文件
+
+
+第五步:
+优化php-fpm，并启动(php-fpm为php的fastcgi模式，简单来说就是php的服务模式)
+# vim /etc/php-fpm.d/www.conf	 --打开php-fpm主配置文件并进行优化(以下优化在生产环境视具体情况而定)
+
+12  listen = /var/run/php-fpm/fastcgi.socket	--原来是监听127.0.0.1:9000也是可以的，我这里换成socket来做(本机连接可以使用socket或tcp/ip协议方式，远程连接只能使用tcp/ip协议方式)
+
+218 php_flag[display_errors] = on	--打开php错误显示功能
+
+39 user = nginx			--用户与组和跑nginx服务的用户一致，避免权限问题	
+41 group = nginx
+
+31 listen.owner = nginx
+32 listen.group = nginx		--socket文件的权限设置。用户与组和跑nginx服务的用户一致，避免权限问题（如果前面使用的是tcp/ip的方式，这里就注释就好)
+33 listen.mode = 0666
+
+60 pm = dynamic           --对于专用服务器，pm可以设置为static。如果选择static，则由pm.max_children指定固定的子进程数。如果选择dynamic,则可以动态调整下面几个参数
+70 pm.max_children = 64	　--子进程最大数,我这里只是参考值（看系统资源决定，视实际环境测试后调整，下几个参数也一样）
+75 pm.start_servers = 20　	--启动时默认启动的进程数
+80 pm.min_spare_servers = 5	--保证空闲进程数最小值，如果空闲进程小于此值，则创建新的子进程
+85 pm.max_spare_servers = 35    --保证空闲进程数最大值，如果空闲进程大于此值，此进行清理
+
+160 rlimit_files = 65535     --打开的文件描述符数量，不能大于系统的限制（系统可以使用ulimit命令查看和设置，后面有例子)
+
+
+
+
+# chown nginx.nginx /var/run/php-fpm/
+
+设置系统打开的文件描述符数量，与上面的配置对应
+# ulimit -n
+1024
+# ulimit -SHn 65535
+# echo "ulimit -SHn 65535" >> /etc/rc.local （设置永久生效）
+
+启动php-fpm服务
+# systemctl start php-fpm.service
+# systemctl status php-fpm.service 
+# systemctl enable php-fpm.service
+
+
+
+
+第六步:
+
+
+
+--nginx的配置文件的一个基本结构如下:
+
+
+全局配置（如跑服务进程的用户,启动进程数,log,pid等)
+
+
+events {
+  	事件（优化并发数，网络IO模型选择）
+}
+
+http  {
+       针对所有server的全局配置
+		
+      server {	
+	虚拟主机一
+      }
+      server {
+	虚拟主机二
+      }
+}
+
+
+
+
+配置nginx
+我这里的配置结果如下
+# cat /etc/nginx/nginx.conf |grep -v '#'
+
+user nginx;
+worker_processes auto;
+error_log /var/log/nginx/error.log;
+pid /run/nginx.pid;
+
+include /usr/share/nginx/modules/*.conf;
+
+events {
+    worker_connections 65535;
+}
+
+http {
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+
+    access_log  /var/log/nginx/access.log  main;
+
+    sendfile            on;
+    tcp_nopush          on;
+    tcp_nodelay         on;
+    keepalive_timeout   65;
+    types_hash_max_size 2048;
+
+    include             /etc/nginx/mime.types;
+    default_type        application/octet-stream;
+
+    include /etc/nginx/conf.d/*.conf;
+
+    server {
+        listen       80 default_server;
+        listen       [::]:80 default_server;
+        server_name  192.168.224.10;
+        root         /usr/share/nginx/html;
+        index 	     index.php index.html;
+
+        include /etc/nginx/default.d/*.conf;
+
+        error_page 404 /404.html;
+            location = /40x.html {
+        }
+
+        error_page 500 502 503 504 /50x.html;
+            location = /50x.html {
+        }
+
+        location ~ \.php$ {
+            fastcgi_pass    unix:/var/run/php-fpm/fastcgi.socket;
+            fastcgi_index  index.php;	
+            fastcgi_param  SCRIPT_FILENAME  $document_root$fastcgi_script_name;
+            include        fastcgi_params;
+        }
+    }
+}
+
+
+
+启动nginx服务
+# systemctl start nginx.service		--80端口不要被其它服务（如httpd）占用了
+# systemctl enable nginx.service
+# systemctl status nginx.service
+# curl 127.0.0.1   (访问本机80端口，验证Nginx服务)
+
+
+
+第七步:
+测试nginx是否工作正常，是否能支持php
+
+在nginx家目录里加上php测试页
+# vim /usr/share/nginx/html/test.php	
+<?php
+        phpinfo();
+?>
+
+测试：找一个有firefox的客户端分别访问下面页面进行测试
+http://10.1.1.2/
+http://10.1.1.2/test.php 
+
+
+概念：错误信息默认页面
+[root@server html]# ll
+总用量 28
+-rw-r--r--. 1 root root 3650 3月   6 2018 404.html
+
+访问一个不存在的页面，然后再访问http://10.1.1.2/404.html 和 http://10.1.1.2/50x.html 有什么发现？
+
+
+
+
+
+
+
+
+
+
+
+第八步:
+安装discuz论坛并测试    (相关软件包共享在　笔记目录lnmp_soft/　目录)
+
+1,解压discuz到nginx家目录
+# mkdir /usr/share/nginx/html/discuz/
+# unzip Discuz_X3.3_SC_UTF8.zip -d /usr/share/nginx/html/discuz/
+# cd /usr/share/nginx/html/discuz/
+# mv upload/*  .
+# rm upload/ -rf
+
+
+3,环境检查这一步，有些目录和文件权限需要修改(下面直接使用简单方式全改成nginx的owner和group)
+# chown nginx.nginx /usr/share/nginx/html/discuz -R
+
+4,mariadb数据库授权
+# mysql
+MariaDB [(none)]> create database lnmp_discuz;  --创建一个库，用于存放将要安装的discuz论坛的表
+MariaDB [(none)]> grant all on lnmp_discuz.* to 'lnmpdiscuz'@'localhost' identified by '123';   --授权一个用户，用于discuz论坛程序连接mysql
+MariaDB [(none)]> flush privileges;
+
+
+5,http://192.168.224.11/discuz/
+填上对应的数据库地址,库,用户,密码。开始安装
+    On web page wizard:
+        选择：全新安装 Discuz! X (含 UCenter Server)
+        数据库名:lnmp_discuz
+        数据库用户名：lnmpdiscuz
+        数据库密码：123
+        管理员密码：123
+        重复密码：123
+6,访问http://192.168.224.11/discuz/forum.php 测试论坛
+
+
+HTML学习资源：http://www.w3school.com.cn/html/index.asp
+PHP学习资源：http://www.w3school.com.cn/php/index.asp
+
+
+
+
+
+
+

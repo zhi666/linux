@@ -1,0 +1,417 @@
+--
+
+
+
+系统优化	
+服务优化  (nginx,tomcat,mysql,oracle)
+客户的代码
+
+横向:加新的设备，架构扩展
+纵向:替换新的更好的设备，使设备负载能力更高
+
+
+加硬件  
+架构
+
+云    　　资源流动性
+
+
+
+
+	cpu    忙     cpu 闲
+
+
+===========================================================================================
+
+linux系统优化，调优
+(微调)
+
+
+CPU
+memory
+IO
+network
+
+service
+
+=======================================================================================================
+
+
+业务上线之前的优化:
+1,安装系统优化
+以教学环境500G硬盘为例:
+/boot	300M-500M  (只存放grub和启动有关文件，不存放其它) 
+/       100G－150G（因为很多人默认会把各种东西放到根目录下,没有单独挂载的分区都属于根);
+swap	内存小就一般分2倍，内存大（现在的服务器16G以上内存很常见)就最大4G或8G
+/var    50－100G （主要存放日志,邮件,ftp,httpd等家目录,kvm的磁盘文件等)
+/vm	50-100G (主要存放vmware虚拟机)
+/data	50G-100G左右 (主要存放你的个人数据)
+/usr/local/your_software
+因为教学需要，还需要留一点空间用于以后分区用。
+如果你的系统出了严重问题，能排错就排错，不能或很麻烦在重装时只格式化根分区就可以了，重装完后，改写/etc/fstab
+根分区分得太小，满了怎么办?如果是lvm可以在线扩容，没用lvm只能去把根分区下的一些数据移到其它分区 （除非用新一代文件系统如btrfs这种；xfs文件可以使用xfs_growfs来扩容)
+b,软件包的选择:你需要啥就安装啥(如果你非常在意系统瘦身，那么选择最小化安装，再安装应用时少啥就装啥)
+
+
+
+
+swap有两种做法(swap文件和swap分区，swap分区会更有效,建议使用swap分区)
+
+测试一：通过文件来增加交换分区
+# dd if=/dev/zero of=/var/swapfile bs=1M count=1000
+# mkswap /var/swapfile
+# swapon /var/swapfile
+# swapoff /var/swapfile   --不用了就swapoff（swapon的反向操作)
+
+测试二：通过磁盘分区来增加交换分区
+1. 为虚拟机添加磁盘
+2. 启动磁盘后在/dev 目录下搜索 ls /dev/sd*。 如果原来只有一块磁盘那么会看到/dev/sdb.
+3. 执行 fdisk /dev/sdb 为磁盘进行分区。
+# mkswap /dev/sdaX  (格式化磁盘为交换分区格式)
+# swapon /dev/sdaX  (使交换分区生效)
+# free -m （查看交换分区大小）
+# swapoff /dev/sdaX (关闭磁盘交换分区)
+
+
+2,
+a,关闭不用的服务 (service xxx stop;systemctl stop xxx 或 chkconfig xxx off;systemctl disable xxxx或 ntsysv --level 2345)
+有几个服务记录不要关闭了:haldaemon,messagebus这两个服务关闭任意一个，就造成开机鼠标键盘无法用(rhel6下的经验,rhel7没有haldaemon服务了)
+常见的不关闭服务:network,sshd,rsyslog（系统日志）,libvirtd（守护进程）,ntpd（时间同步）等
+b,脚本代码性能优化：没有服务脚本的可以写服务脚本，或者有些服务脚本写得不好，你可以修改代码。
+
+
+3,静态IP，网关，dns指向
+# /etc/init.d/NetworkManager stop
+# chkconfig NetworkManager off
+然后配置静态ip
+以server.example.com, IP:192.168.224.10 为例。
+# vim /etc/sysconfig/network-scripts/ifcfg-ens33
+TYPE="Ethernet"
+BOOTPROTO=none
+DEFROUTE="yes"
+IPV4_FAILURE_FATAL="no"
+IPV6INIT="yes"
+IPV6_AUTOCONF="yes"
+IPV6_DEFROUTE="yes"
+IPV6_FAILURE_FATAL="no"
+IPV6_ADDR_GEN_MODE="stable-privacy"
+NAME="ens33"
+UUID="17883cd1-86c8-4ec3-b254-5ce6d462e929"
+DEVICE="ens33"
+ONBOOT="yes"
+IPADDR=192.168.224.10
+PREFIX=24
+GATEWAY=192.168.224.2
+DNS1=192.168.224.2
+IPV6_PEERDNS=yes
+IPV6_PEERROUTES=yes
+
+rhel7里的nmcli命令非常强大，可以几乎控制网络相关的一切修改
+
+
+4,主机名配置和绑定
+问题:域名和主机名有什么区别?
+域名:公网名字，花钱买，唯一
+主机名:内网名字
+
+如果公司现在有100甚至更多台机器，都要互相绑定主机名
+方法一:shell脚本，先在其中一台绑定所有机器的IP与名字到/etc/hosts文件，再用shell脚本循环拷到其它所有机器（ssh等效性或expect)
+方法二:在安装所有机器时，使用kickstart或cobbler，让其在安装的时候就通过postscripts实现安装完后就统一截IP，配置主机名，绑定主机名）;此方法不适合主机名有改变的情况　
+方法三:内网DNS（/etc/nsswitch.conf这个文件里面配置了，称查找/etc/hosts，再查找DNS）
+方法四:使用自动化运维工具，如puppet,ansible,saltslack......
+
+
+
+5,yum配置
+首先要注意yum只能安装rpm包，不能安装源码包。如果觉得安装源码包麻烦，甚至可以自己把源码做成rpm包(要求水平较高)
+
+一般不可能所有服务器都用公网的yum源。建议把本地iso和第三方下载的rpm包都在其中一台服务器做成yum仓库，其他服务器就直接使用这台的yum源就可以了
+
+yum的路径怎么写?
+答案:要写repodata的上一级目录的路径
+
+rhel6的完整本地yum源配法(假充iso挂载到/mnt目录）
+
+[base]
+name=base
+baseurl=file:///mnt/
+enabled=1
+gpgcheck=0
+[server]
+name=server
+baseurl=file:///mnt/Server
+enabled=1
+gpgcheck=0
+[ResilientStorage]
+name=ResilientStorage
+baseurl=file:///mnt/ResilientStorage
+enabled=1
+gpgcheck=0
+[ScalableFileSystem]
+name=ScalableFileSystem
+baseurl=file:///mnt/ScalableFileSystem
+enabled=1
+gpgcheck=0
+[HighAvailability]
+name=HighAvailability
+baseurl=file:///mnt/HighAvailability
+enabled=1
+gpgcheck=0
+[LoadBalancer]
+name=LoadBalancer
+baseurl=file:///mnt/LoadBalancer
+enabled=1
+gpgcheck=0
+
+
+
+如何下载
+a),先配置远程公网yum源路径
+如下
+[puppet]
+name=puppet
+baseurl=http://yum.puppetlabs.com/el/6.5/products/x86_64/
+enabled=1
+gpgcheck=0
+
+b)使用reposync命令
+reposync --repoid=puppet
+都会下载到本地当前目录
+
+c)因为下载后，没有repodata目录，所以需要手动生成
+createrepo  $（本地软件仓库路径）
+
+d)通过服务如httpd做成其它服务器能使用的yum源
+
+
+
+9，文件系统(单机文件系统，集群式文件系统，分布式文件系统；非日志文件系统和日志文件系统）
+ext2,ext3,ext4,fat32,ntfs,xfs,reiserfs,zfs,btrfs,jfs,nfs,gfs2,ocfs......
+
+
+
+c,Ext4 提供三种数据日志记录方式： data=writeback 、 data=ordered  (默认) data=journal。
+
+ data=writeback   速度最快，但不记录文件系统日志，只记录基本元数据，数据安全性低 
+ data=journal     速度最慢。但记录完整文件系统日志，数据安全性高	
+ data=ordered	  居中
+如果要修改，在mount时用-o data=writeback来挂载就可以.或者在/etc/fstab里defaults,data=writeback就可以了
+
+小实验:
+用一个实验分区，分三种日志记录方式去挂载，然后使用dd命令写文件来测试比较速度
+
+1. 在虚拟机中添加虚拟硬盘
+
+2.fdisk /dev/sdb  
+mkfs.ext4  /dev/sdb1
+mount -o defaults,data=writeback /dev/sdb1 /mnt/
+dd if=/dev/zero of=/mnt/testfile bs=1M count=1000
+--最快
+
+3. umount /mnt
+mount -o defaults,data=journal /dev/sdb1  /mnt
+dd if=/dev/zero of=/mnt/testfile bs=1M count=1000
+--最慢
+
+4. umount /mnt
+mount -o defaults,data=ordered /dev/sdb1 /mnt
+dd if=/dev/zero of=/mnt/testfile bs=1M count=1000
+--居中
+
+
+
+
+
+小实验:
+使用下面命令模拟一个分区丢失superblock，相当于是文件系统出问题
+# dd if=/dev/zero of=/dev/sdb1 bs=1 count=1024 seek=1024
+(在分区/dev/sdb1 第1024的位置开始写入1024kb字节)
+
+文件系统出问题，挂载就会报下面的错误
+# mount  /dev/sdb1 /mnt/
+mount: you must specify the filesystem type
+
+排错，不能直接重新格式化，那样的话数据全丢了.所以可以用下面的命令修复
+# fsck /dev/sdb1
+# mount  /dev/sdb1 /mnt/  (成功加载)
+
+
+======================================================================================================
+
+
+
+
+一，
+cpu（Central Processing Unit)子系统 
+
+CPU 的占用主要取决于什么样的资源正在 CPU 上面运行，
+比如拷贝一个文件通常占用较少CPU,只是在完成拷贝以后给一个中断让CPU知道拷贝已经完成
+
+科学计算通常占用较多的CPU，大部分计算工作都需要在CPU上完成，内存、硬盘等子系统只做暂时的数据存储工作
+要想监测和理解CPU的性能需要知道一些的操作系统的基本知识，比如：中断，进程调度，进程上下文切换,可运行队列等
+
+
+cpu单核在同一个时间点只能干一件事，但单核CPU一样可以跑多任务操作系统，其实就是分CPU资源（时间片）
+
+
+CPU很无辜，是个任劳任怨的打工仔,每时每刻都有工作在做(进程、线程)并且自己有一张工作清单(可运行队列)，
+由老板(进程调度)来决定他该干什么，他需要和老板沟通以便得到老板的想法并及时调整自己的工作　　(上下文切换)，
+部分工作做完以后还需要及时向老板汇报(中断)，
+所以打工仔(CPU)除了做自己该做的工作以外，还有大量时间和精力花在沟通和汇报上。
+
+
+	中断	设备通知内核，完成了一次数据处理过程。也可以理解为：cpu停止下来去执行别的指令。例如：完成一次IO。或者完成一次网络数据包的发送。
+	内核处理过程 --- 控制优先级，进行任务调度。
+	用户进程
+	上下文切换 --- 把正在占用cpu的进程放回队列中（每次内核的上下文切换,资源被用于关闭在CPU寄存器中的线程和放置在队列中）
+	运行队列
+
+
+
+那么监测CPU性能的底线是什么呢?通常我们期望我们的系统能到达以下目标：
+
+
+　　CPU利用率，如果CPU有100%利用率，那么应该到达这样一个平衡：65%-70% User Time，30%-35% System Time，0%-5% Idle Time;
+
+　　上下文切换，上下文切换应该和 CPU 利用率联系起来看，如果能保持上面的 CPU 利用率平衡，大量的上下文切换是可以接受的;
+
+
+
+查看cpu信息
+# cat /proc/cpuinfo   --能看到指令集，CPU核数，频率，缓存等相关信息
+# lscpu
+
+
+
+要采集CPU当前正在运行的信息数据，要用到下面的命令或者监控软件（nagios,zabbix等)
+top
+uptime	（已经运行的时间）	
+vmstat
+mpstat --需要yum install sysstat
+sar  --需要yum install sysstat
+
+
+
+# vmstat 2  	每2秒钟采集一下数据
+# vmstat 2 3 	每2秒钟采集一次，一共采集3次
+
+# vmstat 2
+procs -----------memory---------- ---swap-- -----io---- --system-- -----cpu------
+ r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st
+ 1  0      0  78112  63432 1519100    0    0   233    18 1906 1190 26 13 59  1  0
+ 1  0      0  78112  63432 1519100    0    0     0     0 4180 1378 33 17 50  0  0
+ 1  0      0  78112  63440 1519092    0    0     0    30 4284 1706 33 17 50  0  0
+
+
+r	可运行队列。单核cpu，不应该超过3（经验得到的数据，只是表明大于这个值表明运行队列有点长)
+b	当前被阻塞的进程，一般这些进程都是在等待某些外部资源而被阻塞。>3需要注意，而且一直出现或者经常出现，就更值得注意
+in	中断数。一般代表大量设备操作成功通知内核。
+cs	上下文切换。一般代表任务需要紧急被cpu处理。数字高，只能说明内核在充分发挥它的任务调度作用。不能简单通过该数字判断cpu就出现瓶颈。
+us	用户进程所占用的cpu时间的百分比
+sy	内核在进行任务调度所占用的cpu时间的百分比
+id	cpu空闲所占用的时间百分比.仅仅0不能简单判断cpu出现瓶颈，只能说它被充分被留用。
+wa	等待IO所消耗时间百分比
+st	被硬件虚拟化的虚拟机所消耗掉的时间百分比
+
+
+
+
+
+
+mpstat 和 vmstat 类似，不同的是 mpstat 可以输出多个处理器的数据
+
+
+# mpstat  -P ALL 1	---P ALL表示查看所有CPU核， 1表示每一秒显示一次
+10:46:35 AM  CPU   %user   %nice    %sys %iowait    %irq   %soft  %steal   %idle    intr/s
+10:46:36 AM  all   26.13    0.00    6.53    0.00    3.52    9.05    0.00   54.77  19478.22
+10:46:36 AM    0   25.74    0.00    6.93    0.00    2.97    7.92    0.00   56.44   9740.59
+10:46:36 AM    1   26.73    0.00    6.93    0.00    3.96   10.89    0.00   51.49   9739.60
+
+
+
+
+# sar -u  查看cpu相关的历史数据	--这是历史数据，是每十分钟会去采集一次系统相关的数据
+# sar -u 2 3	--两秒一次，显示三次（不是历史数据，是当前动态数据)
+
+
+
+sysstat  --> 提供 sar 命令		(system activity reporter)
+
+sar的特点：可以对过去时间的系统状态进行分析,但不能对某个进程进行深入分析，只能对系统的整体情况进行分析。
+
+# yum install sysstat   -y		
+# systemctl start sysstat 
+# systemctl enable sysstat
+
+
+
+安装systat包后，就会自动在 /var/log/sa/saxx 产生数据   xx代表日期
+可以使用sar -f /var/log/sa/saxx  去访问  加参数就可以访问不同类型的性能数据
+
+		指定查询之前的日期与固定时间点的方法
+
+
+	 sar -u -f /var/log/sa/sa18	--查看这个月已经过的18号的cpu历史数据
+
+	 sar -u -f /var/log/sa/sa18  -s 09:00:00 -e 10:00:00	--指定只看18号9点到10点的cpu历史数据
+
+
+
+保存性能数据
+sar支持保存成两种格式的文件，一种是文本文件，一种是二进制文件 （只有通过sar自己的命令 -f 参数 才能看）
+
+保存为文本文件,可以直接cat命令查看
+sar -p 1 5 > /tmp/sar1.txt
+
+保存为二进制文件
+sar -p  1 5  -o /tmp/sar2.txt 1>/dev/null    	--会显示到屏幕，可以用1>/dev/null
+file /tmp/sar2.txt      --是data类型文件
+sar -f /tmp/sar2.txt     --使用-f参数读取  
+
+
+
+
+
+
+
+=================================================================
+
+
+总结:现在的架构cpu极少会成为瓶颈.就算是真的cpu成为了瓶颈,对cpu能做的优化太少了（要么就换硬件，要么通过扩展架构来分担压力,杀掉无用并且占用资源的进程)
+
+
+
+进程优先级
+nice  优先级    能调的范围是 -20到19 	-20表示优先级最高，19最低
+用户运行一个程序默认给的优先级为0
+nice 优先级高的能够优先分配资源，跑得快，花费的时间少，负载越高，效果越明显
+
+
+renice    对一个已经运行的进程进行nice值的调整
+
+vim /tmp/1.sh
+#!/bin/bash
+a=1
+sum=0
+while true
+do
+        sum=$[$sum+$a]
+        let a++
+done
+         
+
+试验一
+# bash /tmp/1.sh & (执行此命令5-10遍)
+# top 观察各个进程的优先级
+# renice 19  pid（pid号码通过top命令观察得到）
+# top 观察特性PID的CPU使用情况
+执行上面的命令，可以看到设置低优先级别后，CPU使用率降低
+
+实验二：
+[root@server sa]# renice -19 8024
+8024 (process ID) old priority 19, new priority -19
+# top 观察特性PID的CPU使用情况
+执行上面的命令，可以看到设置高优先级别后，CPU使用率升高
+
+
+注意：只有管理员才能把优先级往高调，普通用户只能调自己的，并且只能往低调，调低后还不能再调高

@@ -1,0 +1,704 @@
+﻿
+======================================
+
+Kubernetes是最近DevOps世界里最让人激动的技术了。在过去的几年里它吸引了很多人。它瞬间成名的原因是强大的容器技术。
+
+Docker公司推出了伟大的容器产品，让容器成为了技术领域独一无二的焦点。Docker成功推动了容器的广泛使用，然而容器技术的迅猛发展反过来却让其变得有点过时了。不过正是因为Docker，Linux容器的使用才会如此流行，这推动了容器编排引擎的发展。
+
+进入Kubernetes(k8s)时代——Kubernetes由Google开发，Google的基础架构世界领先，运行多年，支撑着其数十亿的容器的运行，Kubernetes则是凝聚了Google这些年实际经验的结晶。Kubernetes轰动一时，从今年开始，Docker公司支持Kubernetes作为额外的编排引擎选项，和Docker Swarm并列。
+
+从今以后，Kubernetes也将是Docker社区和Docker企业版的一部分。听上去很不错吧？各自领域的最佳方案终归打包在了一起。
+
+概述
+Kubernetes，k8s，或称为kube，是一个开源平台，可以将容器的运维操作自动化。它消除了绝大部分已有的手工流程，包括部署，扩展以及容器化应用程序的管理。
+
+使用Kubernetes，用户可以将运行容器的主机组放到集群里。Kubernetes帮助用户管理这些集群。
+
+Kubernetes由Google的工程师团队开发以及设计。Google很久以来一直就是容器技术的贡献者。Kubernetes不仅是Google容器技术的活招牌，而且也在背后支撑着Google的云服务产品。
+
+Google每周部署超过20亿个容器。这些都是由称为Borg的内部平台支撑的。Borg是Kubernetes的先驱。Google使用Borg多年积累下来的经验教训成为了Kubernetes的理念来源。
+
+Kubernetes简化了部署以及管理容器化应用程序相关的所有事情。Kubernetes将升级，回滚以及已部署服务的健康监控等等工作都自动化了。这让用户可以在事情真的变得很糟糕之前避免有问题版本的升级。
+
+另外，Kubernetes可以基于使用情况动态地对服务进行扩容缩容，确保用户只会在需要的时候运行所需要的实例。和容器一样，Kubernetes允许用户管理集群，做版本控制和复制。
+
+Kubernetes 是容器化服务及应用的管理器。它易于扩展，可以管理大量容器；更重要的是，可以通过基于 yaml 的模板文件高度灵活地进行配置。
+
+===================
+
+环境设置：
+
+主节点Master    192.168.224.10
+成员节点member  192.168.224.11
+
+
+准备：
+在所有的机器上执行：
+# swapoff -a
+# free -m (确认关闭缓存)
+
+设置网络规则
+# cat <<EOF >  /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+EOF
+
+生效
+# sysctl --system
+
+安装bzip2解压工具
+# yum install -y bzip2
+
+复制压缩包，并且解压缩
+# cp k8s_images.tar.bz2 /root/
+# cd /root/
+# tar -xjvf /root/k8s_images.tar.bz2
+
+安装Docker
+# yum install -y docker
+
+关闭Docker selinux安全性
+# vim /etc/sysconfig/docker
+	Modify string from "--selinux-enabled" to "--selinux-enabled=false"
+
+启动Docker
+# systemctl start docker
+# systemctl enable docker
+
+
+检查Docker 版本
+# docker version
+Client:
+ Version:         1.13.1
+ API version:     1.26
+ Package version: docker-1.13.1-75.git8633870.el7.centos.x86_64
+ Go version:      go1.9.4
+ Git commit:      8633870/1.13.1
+ Built:           Fri Sep 28 19:45:08 2018
+ OS/Arch:         linux/amd64
+
+Server:
+ Version:         1.13.1
+ API version:     1.26 (minimum version 1.12)
+ Package version: docker-1.13.1-75.git8633870.el7.centos.x86_64
+ Go version:      go1.9.4
+ Git commit:      8633870/1.13.1
+ Built:           Fri Sep 28 19:45:08 2018
+ OS/Arch:         linux/amd64
+ Experimental:    false
+
+
+
+创建Docker配置文件目录，并设置Docker 镜像源
+这样下载镜像会快一些，阿里云的镜像源
+# sudo mkdir -p /etc/docker
+
+# sudo tee /etc/docker/daemon.json <<-'EOF'
+{
+  "registry-mirrors": ["https://f7mxmtsw.mirror.aliyuncs.com"]
+}
+EOF
+
+vim /etc/docker/daemon.json
+{
+  "registry-mirrors": ["https://f7mxmtsw.mirror.aliyuncs.com"]
+}
+
+重启服务并生效
+# sudo systemctl daemon-reload
+# sudo systemctl restart docker
+
+确认Docker版本
+# docker info
+Containers: 0
+ Running: 0
+ Paused: 0
+ Stopped: 0
+Images: 0
+Server Version: 1.13.1
+Storage Driver: overlay2
+ Backing Filesystem: xfs
+ Supports d_type: true
+ Native Overlay Diff: false
+Logging Driver: journald
+Cgroup Driver: systemd
+Plugins: 
+ Volume: local
+ Network: bridge host macvlan null overlay
+Swarm: inactive
+Runtimes: docker-runc runc
+Default Runtime: docker-runc
+Init Binary: /usr/libexec/docker/docker-init-current
+containerd version:  (expected: aa8187dbd3b7ad67d8e5e3a15115d3eef43a7ed1)
+runc version: 5eda6f6fd0c2884c2c8e78a6e7119e8d0ecedb77 (expected: 9df8b306d01f59d3a8029be411de015b7304dd8f)
+init version: fec3683b971d9c3ef73f284f176672c44b448662 (expected: 949e6facb77383876aeff8a6944dde66b3089574)
+Security Options:
+ seccomp
+  WARNING: You're not using the default seccomp profile
+  Profile: /etc/docker/seccomp.json
+Kernel Version: 3.10.0-514.el7.x86_64
+Operating System: CentOS Linux 7 (Core)
+OSType: linux
+Architecture: x86_64
+Number of Docker Hooks: 3
+CPUs: 4
+Total Memory: 1.781 GiB
+Name: server.cluster.com
+ID: KN5G:SO7Z:AB5N:UHNV:QZM3:7WNA:DQDZ:MT5L:5QQN:RPAN:UOCD:AUNM
+Docker Root Dir: /var/lib/docker
+Debug Mode (client): false
+Debug Mode (server): false
+Registry: https://index.docker.io/v1/
+Experimental: false
+Insecure Registries:
+ 127.0.0.0/8
+Registry Mirrors:
+ https://f7mxmtsw.mirror.aliyuncs.com
+Live Restore Enabled: false
+Registries: docker.io (secure)
+
+
+加载Docker镜像
+docker load </root/k8s_images/docker_images/etcd-amd64_v3.1.10.tar
+docker load </root/k8s_images/docker_images/flannel_v0.9.1-amd64.tar
+docker load </root/k8s_images/docker_images/k8s-dns-dnsmasq-nanny-amd64_v1.14.7.tar
+docker load </root/k8s_images/docker_images/k8s-dns-kube-dns-amd64_1.14.7.tar
+docker load </root/k8s_images/docker_images/k8s-dns-sidecar-amd64_1.14.7.tar
+docker load </root/k8s_images/docker_images/kube-apiserver-amd64_v1.9.0.tar
+docker load </root/k8s_images/docker_images/kube-controller-manager-amd64_v1.9.0.tar
+docker load </root/k8s_images/docker_images/kube-scheduler-amd64_v1.9.0.tar
+docker load </root/k8s_images/docker_images/kube-proxy-amd64_v1.9.0.tar
+docker load </root/k8s_images/docker_images/pause-amd64_3.0.tar
+docker load </root/k8s_images/kubernetes-dashboard_v1.8.1.tar
+
+手动安装kubernetes rpm安装包
+cd /root/k8s_images
+rpm -ivh /root/k8s_images/socat-1.7.3.2-2.el7.x86_64.rpm
+rpm -ivh /root/k8s_images/kubernetes-cni-0.6.0-0.x86_64.rpm  /root/k8s_images/kubelet-1.9.9-9.x86_64.rpm
+rpm -ivh /root/k8s_images/kubectl-1.9.0-0.x86_64.rpm
+rpm -ivh /root/k8s_images/kubeadm-1.9.0-0.x86_64.rpm
+
+5、下载kubeadm以及相关插件服务需要配置YUM仓库， 也可以上面手动安装
+# yum install kubeadm kubectl kubelet -y  
+# systemctl daemon-reload
+
+启动kubelet服务
+# systemctl enable kubelet && systemctl restart kubelet
+
+（推荐在这里做快照）
+--------
+！！！在主节点执行！！！
+-------------------------
+初始化网络服务
+# kubeadm init --kubernetes-version=v1.9.0 --pod-network-cidr=10.244.0.0/16
+[init] Using Kubernetes version: v1.9.0
+[init] Using Authorization modes: [Node RBAC]
+[preflight] Running pre-flight checks.
+  [WARNING Hostname]: hostname "server.cluster.com" could not be reached
+  [WARNING Hostname]: hostname "server.cluster.com" lookup server.cluster.com on 192.168.224.2:53: no such host
+  [WARNING FileExisting-crictl]: crictl not found in system path
+[certificates] Generated ca certificate and key.
+[certificates] Generated apiserver certificate and key.
+[certificates] apiserver serving cert is signed for DNS names [server.cluster.com kubernetes kubernetes.default kubernetes.default.svc kubernetes.default.svc.cluster.local] and IPs [10.96.0.1 192.168.224.10]
+[certificates] Generated apiserver-kubelet-client certificate and key.
+[certificates] Generated sa key and public key.
+[certificates] Generated front-proxy-ca certificate and key.
+[certificates] Generated front-proxy-client certificate and key.
+[certificates] Valid certificates and keys now exist in "/etc/kubernetes/pki"
+[kubeconfig] Wrote KubeConfig file to disk: "admin.conf"
+[kubeconfig] Wrote KubeConfig file to disk: "kubelet.conf"
+[kubeconfig] Wrote KubeConfig file to disk: "controller-manager.conf"
+[kubeconfig] Wrote KubeConfig file to disk: "scheduler.conf"
+[controlplane] Wrote Static Pod manifest for component kube-apiserver to "/etc/kubernetes/manifests/kube-apiserver.yaml"
+[controlplane] Wrote Static Pod manifest for component kube-controller-manager to "/etc/kubernetes/manifests/kube-controller-manager.yaml"
+[controlplane] Wrote Static Pod manifest for component kube-scheduler to "/etc/kubernetes/manifests/kube-scheduler.yaml"
+[etcd] Wrote Static Pod manifest for a local etcd instance to "/etc/kubernetes/manifests/etcd.yaml"
+[init] Waiting for the kubelet to boot up the control plane as Static Pods from directory "/etc/kubernetes/manifests".
+[init] This might take a minute or longer if the control plane images have to be pulled.
+ 这里等待时间会比较长
+[apiclient] All control plane components are healthy after 23.001206 seconds
+[uploadconfig] Storing the configuration used in ConfigMap "kubeadm-config" in the "kube-system" Namespace
+[markmaster] Will mark node server.cluster.com as master by adding a label and a taint
+[markmaster] Master server.cluster.com tainted and labelled with key/value: node-role.kubernetes.io/master=""
+[bootstraptoken] Using token: 4a5133.8736b2807e38b833
+[bootstraptoken] Configured RBAC rules to allow Node Bootstrap tokens to post CSRs in order for nodes to get long term certificate credentials
+[bootstraptoken] Configured RBAC rules to allow the csrapprover controller automatically approve CSRs from a Node Bootstrap Token
+[bootstraptoken] Configured RBAC rules to allow certificate rotation for all node client certificates in the cluster
+[bootstraptoken] Creating the "cluster-info" ConfigMap in the "kube-public" namespace
+[addons] Applied essential addon: kube-dns
+[addons] Applied essential addon: kube-proxy
+
+Your Kubernetes master has initialized successfully!
+
+To start using your cluster, you need to run the following as a regular user:
+
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+You should now deploy a pod network to the cluster.
+Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:
+  https://kubernetes.io/docs/concepts/cluster-administration/addons/
+
+You can now join any number of machines by running the following on each node
+as root:
+现在，您可以通过在每个节点上运行以下命令来加入任意数量的计算机 作为root:
+
+
+  kubeadm join --token 4a5133.8736b2807e38b833 192.168.224.10:6443 --discovery-token-ca-cert-hash sha256:69e87618c51090563484d6f7bd9046dc57c81a4f046a050fe3f65cefcdce277c
+
+以上为kubeadm初始化命令的输出信息，记录输出结果的最后2行。这2行为在集群成员上执行的命令，用于将成员加入集群中。 
+--------------------------------
+
+设置环境变量
+# echo "export KUBECONFIG=/etc/kubernetes/admin.conf" >> ~/.bash_profile
+# source ~/.bash_profile
+
+确认版本信息
+# kubectl version
+Client Version: version.Info{Major:"1", Minor:"9", GitVersion:"v1.9.0", GitCommit:"925c127ec6b946659ad0fd596fa959be43f0cc05", GitTreeState:"clean", BuildDate:"2017-12-15T21:07:38Z", GoVersion:"go1.9.2", Compiler:"gc", Platform:"linux/amd64"}
+Server Version: version.Info{Major:"1", Minor:"9", GitVersion:"v1.9.0", GitCommit:"925c127ec6b946659ad0fd596fa959be43f0cc05", GitTreeState:"clean", BuildDate:"2017-12-15T20:55:30Z", GoVersion:"go1.9.2", Compiler:"gc", Platform:"linux/amd64"}
+
+
+# cd /root/k8s_images
+[root@server k8s_images]# kubectl create -f kube-flannel.yml
+clusterrole "flannel" created
+clusterrolebinding "flannel" created
+serviceaccount "flannel" created
+configmap "kube-flannel-cfg" created
+daemonset "kube-flannel-ds" created
+
+
+
+
+-----------
+！！！在集群成员节点执行！！！
+
+执行token命令，参考主节点上执行kubeadm init命令的输出结果。
+
+样例（注意不能复制，一定要复制主节点kubeadm init命令的输出结果的最后2行）：
+
+[root@client1 k8s_images]# kubeadm join --token 4a5133.8736b2807e38b833 192.168.224.10:6443 --discovery-token-ca-cert-hash sha256:69e87618c51090563484d6f7bd9046dc57c81a4f046a050fe3f65cefcdce277c
+
+[preflight] Running pre-flight checks.
+  [WARNING FileExisting-crictl]: crictl not found in system path
+[discovery] Trying to connect to API Server "192.168.224.10:6443"
+[discovery] Created cluster-info discovery client, requesting info from "https://192.168.224.10:6443"
+[discovery] Requesting info from "https://192.168.224.10:6443" again to validate TLS against the pinned public key
+[discovery] Cluster info signature and contents are valid and TLS certificate validates against pinned roots, will use API Server "192.168.224.10:6443"
+[discovery] Successfully established connection with API Server "192.168.224.10:6443"
+
+This node has joined the cluster:
+* Certificate signing request was sent to master and a response
+  was received.
+* The Kubelet was informed of the new secure connection details.
+
+Run 'kubectl get nodes' on the master to see this node join the cluster.
+
+
+--------
+！！！在主节点执行！！！
+
+确认所有节点都加入到集群中，注意：下面的命令在成员加入后要等一段时间才会生效。最快10秒
+# kubectl get nodes
+NAME                  STATUS     ROLES     AGE       VERSION
+client1.example.com   NotReady   <none>    5s        v1.9.0
+server.cluster.com    Ready      master    1m        v1.9.0
+
+确认所有的服务都已经安装完毕
+# kubectl get pods --all-namespaces 
+NAMESPACE     NAME                                         READY     STATUS    RESTARTS   AGE
+kube-system   etcd-server.cluster.com                      1/1       Running   0          13s
+kube-system   kube-apiserver-server.cluster.com            0/1       Pending   0          1s
+kube-system   kube-controller-manager-server.cluster.com   0/1       Pending   0          7s
+kube-system   kube-dns-6f4fd4bdf-x796c                     3/3       Running   0          54s
+kube-system   kube-flannel-ds-5pgnw                        1/1       Running   0          16s
+kube-system   kube-flannel-ds-vgg6j                        1/1       Running   0          33s
+kube-system   kube-proxy-tt4zr                             1/1       Running   0          16s
+kube-system   kube-proxy-vm4mz                             1/1       Running   0          53s
+kube-system   kube-scheduler-server.cluster.com            0/1       Pending   0          5s
+
+
+
+
+
+
+==========
+安装控制台仪表盘
+！！！在主节点执行！！！
+
+安装仪表盘
+# cd /root/k8s_images
+# kubectl create -f kubernetes-dashboard.yaml
+....
+secret "kubernetes-dashboard-certs" created
+serviceaccount "kubernetes-dashboard" created
+role "kubernetes-dashboard-minimal" created
+rolebinding "kubernetes-dashboard-minimal" created
+deployment "kubernetes-dashboard" created
+service "kubernetes-dashboard" created
+
+
+	创建账号密码文件
+	# cat <<EOF >  /etc/kubernetes/pki/basic_auth_file
+	admin,admin,2
+	EOF
+
+	配置密码文件
+	# vim /etc/kubernetes/manifests/kube-apiserver.yaml
+	- --basic_auth_file=/etc/kubernetes/pki/basic_auth_file
+
+	重新启动kubelet服务，使密码配置生效
+	# systemctl restart kubelet
+
+	应用API服务器配置
+	# cd /etc/kubernetes/manifests
+	[root@server manifests]# kubectl apply -f kube-apiserver.yaml
+	pod "kube-apiserver" created
+	(如果遇到错误“The connection to the server 192.168.224.10:6443 was refused - did you specify the right host or port?”，再次执行 kubectl apply -f kube-apiserver.yaml 和 systemctl restart kubelet)
+
+	配置Dashboard
+	# kubectl get clusterrole/cluster-admin -o yaml
+	# kubectl create clusterrolebinding login-on-dashboard-with-cluster-admin --clusterrole=cluster-admin --user=admin
+	# kubectl get clusterrolebinding/login-on-dashboard-with-cluster-admin -o yaml
+
+	确认端口开启
+	# lsof -i:32666
+	COMMAND    PID USER   FD   TYPE DEVICE SIZE/OFF NODE NAME
+	kube-prox 5979 root    9u  IPv6  52713      0t0  TCP *:32666 (LISTEN)
+	[root@server manifests]# free -m
+				  total        used        free      shared  buff/cache   available
+	Mem:           1823         719          76          10        1026         856
+	Swap:             0           0           0
+
+
+
+	访问 https://192.168.224.10:32666
+	在控制台首页：
+	  选择：基本
+	  账号/密码： admin/admin
+
+
+
+	方法一：通过控制台部署。
+	部署Nginx到 K8S集群中：
+	进入 控制台-> 工作负载-> 点击链接“➕创建”位于网页左上角 。复制如下代码来从云服务器自动下载nginx镜像。
+	apiVersion: apps/v1 # for versions before 1.9.0 use apps/v1beta2
+	kind: Deployment
+	metadata:
+	  name: nginx-deployment
+	spec:
+	  selector:
+		matchLabels:
+		  app: nginx
+	  replicas: 2 # tells deployment to run 2 pods matching the template
+	  template:
+		metadata:
+		  labels:
+			app: nginx
+		spec:
+		  containers:
+		  - name: nginx
+			image: nginx:1.7.9
+			ports:
+			- containerPort: 80
+
+
+	方法二：通过命令行部署。
+	1. 将内容保存为 yml文件。
+	2. 执行命令：kubectl create -f deployment.yml --save-config
+
+	在Nginx部署完成后，在Master执行下面的命令，确保docker有部署到集群上。
+	[root@server manifests]# kubectl get pods
+	NAME                                READY     STATUS    RESTARTS   AGE
+	nginx-deployment-6c54bd5869-7b655   1/1       Running   0          5m
+	nginx-deployment-6c54bd5869-8xc7p   1/1       Running   0          5m
+
+
+
+	查看应用部署情况
+	# kubectl get deployments 
+	NAME               DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+	nginx-deployment   2         2         2            2           3m
+
+
+	查看节点IP
+	# kubectl get svc
+	NAME         TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE
+	kubernetes   ClusterIP   10.96.0.1    <none>        443/TCP   22m
+
+
+
+	将Docker中的虚拟机暴露在网络中
+	# kubectl expose deployment nginx-deployment --type="LoadBalancer"
+
+
+
+	查看Docker镜像在主节点的映射端口。本例中：镜像为80端口，映射到主节点的32517端口上。
+	[root@server manifests]# kubectl get services
+	NAME               TYPE           CLUSTER-IP      EXTERNAL-IP   PORT(S)        AGE
+	kubernetes         ClusterIP      10.96.0.1       <none>        443/TCP        37m
+	nginx-deployment   LoadBalancer   10.109.70.217   <pending>     80:32517/TCP   10s
+
+	查看资源详细信息：
+	kubectl describe pods nginx
+
+	查看资源运行情况
+	kubectl get pods -o wide
+
+	访问Docker中的Nginx端口：http://192.168.224.10:32517  
+
+
+
+	======================================================
+	API部署例子：
+
+	我们使用kubectl run来运行我们的第一个应用 ，run命令用于新建一个部署。我们需要提供部署名称和应用镜像地址（DockerHub以外的镜像需要全路径）作为参数。通过--port参数，还可以指定app使用的端口。
+	kubectl run kubernetes-bootcamp --image=docker.io/jocatalin/kubernetes-bootcamp:v1 --port=8080
+
+
+	具体后台的操作包括：
+	查找适合这个应用运行的node
+	调度这个应用在选定的node上运行
+	配置集群，在需要的时候为这个应用调配新的node
+	查看应用部署情况kubectl get deployments。
+	$ kubectl get deployments
+	NAME                   DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+	kubernetes-bootcamp    1         1         1            1           5m
+
+
+	查看应用
+	在Kubernetes中，pod运行于私有的、隔离的网络。默认情况下，Pod对集群内的其他pod和服务是可见的，但对网络外部是不可见的。我们在使用kubectl时，实际上是通过API端点(endpoint)（可以理解为URL）与应用进行交互。
+	通过kubectl proxy可以创建一个代理，让你能与集群内的私有网络进行通讯。代理运行过程中没有任何输出，按Ctrl+C可以关闭代理程序。
+	重新打开一个终端运行代理程序
+	# kubectl proxy
+
+	这样就建立了一条从本地主机到集群的连接，代理程序允许从终端直接访问API。通过代理端点，你可以查看所有的API，端点地址是：http://localhost:8001。你可以通过curl命令直接查看：
+	$ curl http://localhost:8001/version
+	{
+	  "major": "1",
+	  "minor": "5",
+	  "gitVersion": "v1.5.2",
+	  "gitCommit": "08e099554f3c31f6e6f07b448ab3ed78d0520507",
+	  "gitTreeState": "clean",
+	  "buildDate": "1970-01-01T00:00:00Z",
+	  "goVersion": "go1.7.1",
+	  "compiler": "gc",
+	  "platform": "linux/amd64"
+	}$
+
+
+	API服务器自动为每个pod建立同名的API端点，而且这些端点可以通过代理访问。
+	首先获取Pod名称存储到POD_NAME中：
+	$ export POD_NAME=$(kubectl get pods -o go-template --template '{{range .items}}{{.metadata.name}}{{"\n"}}{{end}}')
+	$ echo Name of the Pod: $POD_NAME
+	Name of the Pod: kubernetes-bootcamp-390780338-x81xj
+
+	然后向pod中运行的应用发送一个http请求，这个url就指向了Pod的API。
+	$ curl http://localhost:8001/api/v1/proxy/namespaces/default/pods/kubernetes-bootcamp-5d7f968ccb-n5vqb/
+	Hello Kubernetes bootcamp! | Running on: kubernetes-bootcamp-390780338-x81xj | v=1
+	注意：命令行中的参数“kubernetes-bootcamp-5d7f968ccb-dtdv5”，要从“echo POD_NAME”中获得。
+	=================================================
+
+	网站服务应用：
+	在控制台中创建
+	应用一：
+	apiVersion: v1
+	kind: Service
+	metadata:
+	  name: result
+	spec:
+	  type: NodePort
+	  ports:
+		- name: "result-service"
+		  port: 5001
+		  targetPort: 80
+		  nodePort: 31001
+	  selector:
+		app: result
+
+
+	应用二：
+	apiVersion: extensions/v1beta1
+	kind: Deployment
+	metadata:
+	  name: result
+	spec:
+	  replicas: 1
+	  template:
+		metadata:
+		  labels:
+			app: result
+		spec:
+		  containers:
+		  - image: dockersamples/examplevotingapp_result:before
+			name: result
+
+	确认image运行
+	[root@server manifests]# kubectl get pods
+	NAME                                   READY     STATUS    RESTARTS   AGE
+	kubernetes-bootcamp-5d7f968ccb-n5d4c   1/1       Running   0          9m
+	result-76784c98fb-nw6jp                1/1       Running   0          42s
+
+	确认端口
+	[root@server manifests]# kubectl get svc
+	NAME            TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)          AGE
+	kubernetes      ClusterIP   10.96.0.1       <none>        443/TCP          33m
+	nginx-service   NodePort    10.98.157.233   <none>        80:30001/TCP     13m
+	result          NodePort    10.106.86.50    <none>        5001:31001/TCP   2m
+
+	访问网站：
+	[root@server manifests]# curl 192.168.224.10:31001
+
+
+
+	================================
+	Mysql
+
+	部署MYSQL持久化卷
+	kind: PersistentVolume
+	apiVersion: v1
+	metadata:
+	  name: mysql-pv-volume
+	  labels:
+		type: local
+	spec:
+	  storageClassName: manual
+	  capacity:
+		storage: 5Gi
+	  accessModes:
+		- ReadWriteOnce
+	  hostPath:
+		path: "/mnt/data"
+	---
+	apiVersion: v1
+	kind: PersistentVolumeClaim
+	metadata:
+	  name: mysql-pv-claim
+	spec:
+	  storageClassName: manual
+	  accessModes:
+		- ReadWriteOnce
+	  resources:
+		requests:
+		  storage: 2Gi
+
+	--------------------------------------------------
+	部署MySQL服务：
+	apiVersion: v1
+	kind: Service
+	metadata:
+	  name: mysql
+	spec:
+	  ports:
+	  - port: 3306
+	  selector:
+		app: mysql
+	  clusterIP: None
+	---
+	apiVersion: apps/v1 # for versions before 1.9.0 use apps/v1beta2
+	kind: Deployment
+	metadata:
+	  name: mysql
+	spec:
+	  selector:
+		matchLabels:
+		  app: mysql
+	  strategy:
+		type: Recreate
+	  template:
+		metadata:
+		  labels:
+			app: mysql
+		spec:
+		  containers:
+		  - image: mysql:5.7
+			name: mysql
+			env:
+			  # Use secret in real usage
+			- name: MYSQL_ROOT_PASSWORD
+			  value: password
+			ports:
+			- containerPort: 3306
+			  name: mysql
+			volumeMounts:
+			- name: mysql-persistent-storage
+			  mountPath: /var/lib/mysql
+		  volumes:
+		  - name: mysql-persistent-storage
+			persistentVolumeClaim:
+			  claimName: mysql-pv-claim
+
+	查看deployment mysql 资源详细信息 
+	[root@server manifests]# kubectl describe deployment mysql
+	Name:               mysql
+	Namespace:          default
+	CreationTimestamp:  Tue, 30 Oct 2018 08:51:52 -0700
+	Labels:             app=mysql
+	Annotations:        deployment.kubernetes.io/revision=1
+	Selector:           app=mysql
+	Replicas:           1 desired | 1 updated | 1 total | 0 available | 1 unavailable
+	StrategyType:       Recreate
+	MinReadySeconds:    0
+	Pod Template:
+	  Labels:  app=mysql
+	  Containers:
+	   mysql:
+		Image:  mysql:5.6
+		Port:   3306/TCP
+		Environment:
+		  MYSQL_ROOT_PASSWORD:  password
+		Mounts:
+		  /var/lib/mysql from mysql-persistent-storage (rw)
+	  Volumes:
+	   mysql-persistent-storage:
+		Type:       PersistentVolumeClaim (a reference to a PersistentVolumeClaim in the same namespace)
+		ClaimName:  mysql-pv-claim
+		ReadOnly:   false
+	Conditions:
+	  Type           Status  Reason
+	  ----           ------  ------
+	  Available      False   MinimumReplicasUnavailable
+	  Progressing    True    ReplicaSetUpdated
+	OldReplicaSets:  <none>
+	NewReplicaSet:   mysql-544bbdcd6f (1/1 replicas created)
+	Events:
+	  Type    Reason             Age   From                   Message
+	  ----    ------             ----  ----                   -------
+	  Normal  ScalingReplicaSet  4s    deployment-controller  Scaled up replica set mysql-544bbdcd6f to 1
+
+	确认mysql的服务都已经安装完毕
+	[root@server manifests]# kubectl get pods -l app=mysql
+	NAME                     READY     STATUS    RESTARTS   AGE
+	mysql-544bbdcd6f-8jbvq   1/1       Running   0          19s
+
+
+	查看mysql-pv-claim 资源详细信息 
+	[root@server manifests]# kubectl describe pvc mysql-pv-claim
+	Name:          mysql-pv-claim
+	Namespace:     default
+	StorageClass:  manual
+	Status:        Bound
+	Volume:        mysql-pv-volume
+	Labels:        <none>
+	Annotations:   pv.kubernetes.io/bind-completed=yes
+				   pv.kubernetes.io/bound-by-controller=yes
+	Finalizers:    []
+	Capacity:      20Gi
+	Access Modes:  RWO
+	Events:
+	  Type     Reason              Age   From                         Message
+	  ----     ------              ----  ----                         -------
+	  Warning  ProvisioningFailed  32s   persistentvolume-controller  storageclass.storage.k8s.io "manual" not found
+
+
+
+	通过虚拟机宿主机登陆mysql镜像
+	[root@server manifests]# kubectl run -it --rm --image=mysql:5.6 --restart=Never mysql-client -- mysql -h mysql -ppassword
+	If you don't see a command prompt, try pressing enter.
+
+	mysql> create database dbname default charset utf8;
+	mysql> use dbname;
+	Database changed
+	mysql> show tables;
+	Empty set (0.00 sec)

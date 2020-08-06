@@ -1,0 +1,22 @@
+安装epel源更新yum仓库后报错解决方法之一。
+yum install -y epel-release   
+yum clean  all   清除缓存  。
+
+yum makecache  更新Yum仓库报错。
+
+修改epel-repo文件，  
+把#baseurl 这行的注释打开。
+把metalink  这个注释掉。保存退出
+
+然后在更新。yum makecache   ,还是报错。
+接下来
+centos下安装完EPEL源然后更新一下yum缓存如果发现这样的错误:
+Error: Cannot retrieve metalink for repository: epel. Please verify its path and try again
+这就表明你需要更新CA证书了，那么只需要更新CA证书就可以，不过在此同时需要临时禁用epel源并更新就可以了，命令如下：
+yum --disablerepo=epel -y update ca-certificates
+
+然后在  yum  makecache 就可以了。
+
+有时候 iptables ouput 出数据有问题，把udp类型的数据改为可以出，相关代码为
+iptables -A OUTPUT -p udp -m state --state new,established  -j  ACCEPT  
+ 然后 yum makecache  就可以了。

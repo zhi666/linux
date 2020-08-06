@@ -1,0 +1,27 @@
+version: "3.7"
+services:
+  alpine:
+    image:  zabbix/zabbix-agent:centos-4.4-latest
+    container_name: master
+    hostname: Docker推送
+    tty: true
+    privileged: true
+    user: root
+    ports:
+      - "2222:22"
+      - "10060:10060"
+    environment:
+      - ZBX_HOSTNAME=Master_Aliyun HK_Docker
+    restart: always
+    volumes:
+      - "tuisong:/software"
+    networks:
+      - master
+
+networks:
+  master:
+volumes:
+  tuisong:
+    driver: local-persist
+    driver_opts:
+      mountpoint: /data/tuisong

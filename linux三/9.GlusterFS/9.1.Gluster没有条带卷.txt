@@ -1,0 +1,818 @@
+﻿注意：CentOS官方Yum源中Gluster已经更新为6.1版本，并且不支持条带模式。
+参考：https://docs.gluster.org/en/latest/Administrator%20Guide/Setting%20Up%20Volumes/
+
+传统的负载均衡集群
+
+传统
+客户端 -> 调度器 -> 服务器集群 -> （数据库：MySQL Cluster 或许读写分离）（memcache）（NAS，NFS）
+Glust
+客户端 -> 调度器 -> 服务器集群 -> 存储集群（GlusterFS）
+
+
+通过副本可以设置容错性
+HA，LB，HPC（高性能计算集群），Storage集群
+
+
+常见的分布式文件系统：
+DFS分布式存储
+MFS
+TFS淘宝，适应海量小文件存储。开源方案。
+
+
+DFS分为，无中心节点和有中心节点。
+  有中心节点： 性能好，角色清晰。例如 TFS，HOFS，MFS，fastFS
+  无中心节点： Gluster。好处是健壮性。
+
+
+
+
+GlusterFS简介
+PB级容量，高可用性，读/写性能，基于文件系统级别共享，分布式
+
+	GlusterFS(GUN Cluster File System)是一种全对称的开源分布式文件系统，所谓全对称是指GlusterFS采用弹性哈希算法，没有中心节点，所有节点都全部平等。GlusterFS配置方便，稳定性好。可以轻松达到PB级容量。数千个节点。 2011年被红帽收购，之后推出了基于GlusterFS的Red Hat Storage server,增加了针对KVM的许多特性，可用作为KVM存储IMAGE存储集群，也可以为LB或者HA提供存储。
+
+	Glusterfs是一个开源的分布式文件系统,是Scale存储的核心,能够处理千数量级的客户端.在传统的解决 方案中Glusterfs能够灵活的结合物理的,虚拟的和云资源去体现高可用和企业级的性能存储.
+
+	Glusterfs通过TCP/IP或InfiniBand RDMA网络链接将客户端的存储资块源聚集在一起,使用单一的全局命名空间来管理数据,磁盘和内存资源.
+
+	Glusterfs基于堆叠的用户空间设计,可以为不同的工作负载提供高优的性能.
+
+	Glusterfs支持运行在任何标准IP网络上标准应用程序的标准客户端，用户可以在全局统一的命名空间中使用NFS/CIFS等标准协议来访问应用数据.
+
+
+
+
+Gluster重要特性：
+扩展性和高性能
+高可用
+全局统一命名空间
+弹性hash算法
+弹性卷管理
+基于标准协议
+
+
+GlusterFS重要概念：
+brick: GlusterFS的存储基本单元，以节点服务器目录形式展现。
+Volume： 多个bricks的逻辑集合
+Metadata： 元数据，用于描述文件，目录等的信息
+Self-health： 用于后台运行监测文件和目录的不一致问题，并且解决。
+FUSE： FileSystem userspace是一个可加载的内核模块，其支持非特权用户创建自己的文件系统而不是需要修改内核代码。
+GlusterFS Server： 数据存储服务器，即组成GlusterFS存储集群的节点。
+GlusterFS Client： 使用ClusterFS存储服务的客户。 例如：KVM存储池，OpenStack的后端存储，LB RealServer，HA Node
+
+
+
+
+distribute volume：分布式卷
+在分布式卷文件被随机地分布在整个砖的体积。使用分布式卷，你需要扩展存储，冗余是重要或提供其他硬件/软件层。(簡介：分布式卷，文件通过hash算法随机的分布到由bricks组成的卷上。卷中资源仅在一台服务器上存储，在存储池中非镜像或条带模式。)
+
+
+replica volume：复制卷
+复制卷创建跨多个砖的体积的文件的副本。您可以使用复制卷在环境中的高可用性和高可靠性是至关重要的。(簡介：复制式卷，类似raid1，replica数必须等于volume中brick所包含的存储服务器数，可用性高。创建一个两两互为备份的卷，存储池中一块硬盘损坏，不会影响到数据的使用，最少需要两台服务器才能创建分布镜像卷。）
+
+stripe volume：条带卷
+条带卷条纹砖之间的数据的容量。为了达到最佳效果，你应该使用条带卷，只有在高并发环境下，访问非常大的文件。(簡介：条带式卷，类似与raid0，stripe数必须等于volume中brick所包含的存储服务器数，文件被分成数据块，以Round Robin的方式存储在bricks中，并发粒度是数据块，大文件性能好。)
+
+distribute stripe volume：分布式条带卷
+分布式条带卷条带文件在集群中的两个或两个以上的节点。为了达到最佳效果，你应该使用分布式条带卷的要求是扩展存储和高访问非常大的文件的并发环境是至关重要的。(簡介：分布式的条带卷，volume中brick所包含的存储服务器数必须是stripe的倍数(>=2倍)，兼顾分布式和条带式的功能。每个文件分布在四台共享服务器上，通常用于大文件访问处理，最少需要 4 台服务器才能创建分布条带卷。)
+
+distribute replica volume：分布式复制卷
+分配文件在复制砖的体积。您可以使用分布式复制卷要求规模的环境中存储和高可靠性是至关重要的。分布复制卷也提供了更好的读取性能在大多数环境
+
+stripe replica volume：条带复制卷
+条带復制卷条带数据在复制集群中的砖。为了达到最佳效果，你应该使用条纹复制卷在高并发环境下并行访问非常大的文件和性能是至关重要的。在此版本中，这种类型的卷配置仅支持地图减少工作量。
+
+Distribute stripe replicavolume：分布式条带复制卷
+分布式条带复制卷分布条带数据在复制砖集群。为了获得最佳效果，你应该使用分布在高并发的条带复制卷环境下并行访问非常大的文件和性能是至关重要的。在此版本中，这种类型的卷配置仅支持地图减少工作量。
+
+====================================================================
+常用命令：
+gluster peer detach IP 删除集群成员
+gluster peer probe IP  添加集群成员
+gluster peer status。  查看集群状态
+gluster volume info  查看卷信息
+gluster volume status 查看卷状态
+gluster volume add-brick test-volume 192.168.224.11:/opt/gluster/exp12/ force    添加卷
+gluster volume remove-brick test-volume 192.168.224.11:/opt/gluster/exp12 start  删除卷
+gluster volume create test-volume 192.168.224.11:/opt/gluster/exp1 192.168.224.12:/opt/gluster/exp2 192.168.224.13:/opt/gluster/exp3 force
+
+
+
+环境准备：
+4台虚拟机 512内存. 每台机器添加3块2G硬盘（实验目的2G硬盘就可以了）。
+IP List
+192.168.224.10 server 	 作为客户端使用Gluster
+192.168.224.11 Client1   Gluster Node1
+192.168.224.12 Client2   Gluster Node2
+192.168.224.13 Client3   Gluster Node3
+
+
+
+在所有机器上执行：
+yum -y install epel-release
+
+
+在Client1-3上执行
+yum install -y centos-release-gluster
+yum install -y glusterfs glusterfs-server glusterfs-fuse glusterfs-rdma
+systemctl start glusterd
+systemctl enable glusterd
+netstat -tunlp | grep glusterd
+yum -y install tree
+
+
+
+在Client1执行：
+gluster peer probe 192.168.224.12  加入集群成员
+gluster peer probe 192.168.224.13  加入集群成员
+gluster peer status                查看集群状态
+
+
+ 
+
+3、创建分布式卷：
+3.1、创建数据存储目录（在client1、client2、client3上操作）：
+[root@linux-client1 ~]#  mkdir -p /opt/gluster/exp1
+[root@linux-client2 ~]#  mkdir -p /opt/gluster/exp2
+[root@linux-client3 ~]#  mkdir -p /opt/gluster/exp3
+
+
+3.2、创建分布式卷（在client1上操作即可）：
+[root@linux-client1 ~]# gluster volume create test-volume 192.168.224.11:/opt/gluster/exp1 192.168.224.12:/opt/gluster/exp2 192.168.224.13:/opt/gluster/exp3 force
+volume create: test-volume: success: please start the volume to access data
+
+3.3、查看卷的状态（在client1上操作即可）：
+[root@linux-client1 ~]# gluster volume info
+Volume Name: test-volume
+Type: Distribute
+Volume ID: e2248fcf-a37c-44af-92ce-9e31a3a98764
+Status: Created
+Snapshot Count: 0
+Number of Bricks: 3
+Transport-type: tcp
+Bricks:
+Brick1: 192.168.224.11:/opt/gluster/exp1
+Brick2: 192.168.224.12:/opt/gluster/exp2
+Brick3: 192.168.224.13:/opt/gluster/exp3
+Options Reconfigured:
+transport.address-family: inet
+nfs.disable: on
+
+
+
+4、创建复制卷：
+4.1、创建数据存储目录（在client1、client2、client3上操作）：
+[root@linux-client1 ~]# mkdir /opt/gluster/exp4
+[root@linux-client2 ~]# mkdir /opt/gluster/exp5
+[root@linux-client3 ~]# mkdir /opt/gluster/exp6
+
+4.2、创建复制卷（在client1上操作即可）：
+[root@linux-client1 ~]# gluster volume create repl-volume replica 3 transport tcp 192.168.224.11:/opt/gluster/exp4 192.168.224.12:/opt/gluster/exp5 192.168.224.13:/opt/gluster/exp6 force
+
+volume create: repl-volume: success: please start the volume to access data
+ 
+
+4.3、查看卷的状态（在client1上操作即可）：
+[root@linux-client1 ~]# gluster volume info repl-volume
+Volume Name: repl-volume
+Type: Replicate
+Volume ID: 37c5200f-75f7-4f53-aca3-0a733a192708
+Status: Created
+Snapshot Count: 0
+Number of Bricks: 1 x 3 = 3
+Transport-type: tcp
+Bricks:
+Brick1: 192.168.224.11:/opt/gluster/exp4
+Brick2: 192.168.224.12:/opt/gluster/exp5
+Brick3: 192.168.224.13:/opt/gluster/exp6
+Options Reconfigured:
+transport.address-family: inet
+nfs.disable: on
+performance.client-io-threads: off
+
+ 
+
+
+5、条带卷（raid0）：
+5.1、创建数据存储目录（在client1、client2、client3上操作）：
+[root@linux-client1 ~]# mkdir /opt/gluster/exp7
+[root@linux-client2 ~]# mkdir /opt/gluster/exp8
+[root@linux-client3 ~]# mkdir /opt/gluster/exp9
+
+5.2、创建复制卷（在client1上操作即可）：
+[root@linux-client1 ~]# gluster volume create raid0-volume stripe 3 transport tcp 192.168.224.11:/opt/gluster/exp7 192.168.224.12:/opt/gluster/exp8 192.168.224.13:/opt/gluster/exp9 force
+
+volume create: riad0-volume: success: please start the volume to access data
+
+5.3、查看卷的状态：
+[root@linux-client1 ~]# gluster volume info raid0-volume
+Volume Name: raid0-volume
+Type: Stripe
+Volume ID: 61a654be-74c5-4514-80b3-ee2072df4c89
+Status: Created
+Snapshot Count: 0
+Number of Bricks: 1 x 3 = 3
+Transport-type: tcp
+Bricks:
+Brick1: 192.168.224.11:/opt/gluster/exp7
+Brick2: 192.168.224.12:/opt/gluster/exp8
+Brick3: 192.168.224.13:/opt/gluster/exp9
+Options Reconfigured:
+transport.address-family: inet
+nfs.disable: on
+
+ 
+
+ 
+
+ 
+
+6、想要用这些卷就要将它们启动：
+6.1、查看：
+[root@linux-client1 ~]# gluster volume status
+Volume repl-volume is not started
+Volume raid0-volume is not started
+Volume test-volume is not started
+
+ 
+
+6.2、启动：
+[root@linux-client1 ~]# gluster volume start repl-volume
+volume start: repl-volume: success
+
+[root@linux-client1 ~]# gluster volume start raid0-volume
+volume start: riad0-volume: success
+
+[root@linux-client1 ~]# gluster volume start test-volume
+volume start: test-volume: success
+
+ 
+
+6.3、再查看：
+[root@linux-client1 ~]# gluster volume info
+Volume Name: repl-volume
+Type: Replicate
+Volume ID: 37c5200f-75f7-4f53-aca3-0a733a192708
+Status: Started
+Snapshot Count: 0
+Number of Bricks: 1 x 3 = 3
+Transport-type: tcp
+Bricks:
+Brick1: 192.168.224.11:/opt/gluster/exp4
+Brick2: 192.168.224.12:/opt/gluster/exp5
+Brick3: 192.168.224.13:/opt/gluster/exp6
+Options Reconfigured:
+transport.address-family: inet
+nfs.disable: on
+performance.client-io-threads: off
+
+Volume Name: raid0-volume
+Type: Stripe
+Volume ID: 61a654be-74c5-4514-80b3-ee2072df4c89
+Status: Started
+Snapshot Count: 0
+Number of Bricks: 1 x 3 = 3
+Transport-type: tcp
+Bricks:
+Brick1: 192.168.224.11:/opt/gluster/exp7
+Brick2: 192.168.224.12:/opt/gluster/exp8
+Brick3: 192.168.224.13:/opt/gluster/exp9
+Options Reconfigured:
+transport.address-family: inet
+nfs.disable: on
+
+Volume Name: test-volume
+Type: Distribute
+Volume ID: e2248fcf-a37c-44af-92ce-9e31a3a98764
+Status: Started
+Snapshot Count: 0
+Number of Bricks: 3
+Transport-type: tcp
+Bricks:
+Brick1: 192.168.224.11:/opt/gluster/exp1
+Brick2: 192.168.224.12:/opt/gluster/exp2
+Brick3: 192.168.224.13:/opt/gluster/exp3
+Options Reconfigured:
+transport.address-family: inet
+nfs.disable: on
+
+ 
+
+ 
+
+ 
+
+ 
+
+7、挂载使用测试：
+7.1、在客户端上安装glusterfs-client客户端(在Server上操作)：
+[root@linux-Server ~]# yum install -y centos-release-gluster
+[root@linux-Server ~]# yum install -y glusterfs  glusterfs-fuse glusterfs-rdma
+[root@linux-Server ~]# yum install -y glusterfs-client
+
+7.2、创建挂载目录(在Server上操作)：
+[root@linux-Server ~]# mkdir /mnt/a1 /mnt/a2 /mnt/a3
+
+7.3、挂载(在Server上操作)：
+[root@linux-Server ~]# mount.glusterfs 192.168.224.11:/test-volume /mnt/a1/
+[root@linux-Server ~]# mount.glusterfs 192.168.224.11:/repl-volume /mnt/a2/
+[root@linux-Server ~]# mount.glusterfs 192.168.224.11:/raid0-volume /mnt/a3/
+
+7.4、查看(在Server上操作)：
+[root@linux-Server ~]# df -hT
+Filesystem                   Type            Size  Used Avail Use% Mounted on
+/dev/mapper/centos-root      xfs              18G  3.9G   14G  23% /
+devtmpfs                     devtmpfs        479M     0  479M   0% /dev
+tmpfs                        tmpfs           489M     0  489M   0% /dev/shm
+tmpfs                        tmpfs           489M  6.8M  483M   2% /run
+tmpfs                        tmpfs           489M     0  489M   0% /sys/fs/cgroup
+/dev/sda1                    xfs             497M  125M  373M  26% /boot
+tmpfs                        tmpfs            98M     0   98M   0% /run/user/0
+192.168.224.11:/test-volume  fuse.glusterfs   53G   13G   40G  24% /mnt/a1
+192.168.224.11:/repl-volume  fuse.glusterfs   18G  4.5G   14G  26% /mnt/a2
+192.168.224.11:/riad0-volume fuse.glusterfs   53G   13G   40G  24% /mnt/a3
+
+
+7.5、写入内容(在Server上操作)：
+[root@linux-Server ~]# echo abc > /mnt/a1/test1.txt  #写入分布式卷
+[root@linux-Server ~]# echo aaa > /mnt/a1/test2.txt
+[root@linux-Server ~]# echo aaa > /mnt/a2/test3.txt  #写入复制卷
+[root@linux-Server ~]# echo aaa > /mnt/a3/test4.txt  #写入条带卷
+
+
+7.6、查看结果（在client1、client2、client3上操作）：
+[root@linux-client1 ~]# tree /opt/gluster/
+/opt/gluster/
+├── exp1
+│   └── test2.txt
+├── exp4
+│   └── test3.txt
+└── exp7
+    └── test4.txt
+
+
+
+[root@linux-client2 ~]# tree /opt/gluster/
+/opt/gluster/
+├── exp2
+│   └── test1.txt
+├── exp5
+│   └── test3.txt
+└── exp8
+    └── test4.txt
+
+ 
+[root@linux-client3 ~]# tree /opt/gluster/
+/opt/gluster/
+├── exp3
+├── exp6
+│   └── test3.txt
+└── exp9
+    └── test4.txt
+
+结论：
+/mnt/a1/test1.txt 和 /mnt/a1/test2.txt 分布在不同的卷中
+/mnt/a2/test3.txt 有相同的副本
+/mnt/a3/test4.txt 以条带的方式存储在不同地方
+
+ ======= ======= ======= ======= ======= =======
+
+
+
+
+
+
+
+
+
+
+
+
+8、分布式复制卷（推荐用）：
+8.1、创建数据存储目录（在client1、client2、client3上操作）：
+[root@linux-client1 ~]# mkdir /opt/gluster/exp10 /opt/gluster/exp11
+[root@linux-client2 ~]# mkdir /opt/gluster/exp10 /opt/gluster/exp11
+[root@linux-client3 ~]# mkdir /opt/gluster/exp10 /opt/gluster/exp11
+
+ 
+
+8.2、创建分布式复制卷（在client1上操作即可）：
+[root@linux-client1 ~]# gluster volume create dreplica-volume replica 3 transport tcp 192.168.224.11:/opt/gluster/exp10/ 192.168.224.12:/opt/gluster/exp10/ 192.168.224.13:/opt/gluster/exp10/ 192.168.224.11:/opt/gluster/exp11/ 192.168.224.12:/opt/gluster/exp11/ 192.168.224.13:/opt/gluster/exp11/ force
+
+volume create: dreplica-volume: success: please start the volume to access data
+
+ 
+
+8.3、启动分布式复制卷（在client1上操作即可）：
+[root@linux-client1 ~]# gluster volume start dreplica-volume
+volume start: dreplica-volume: success
+
+ 
+
+ 
+
+8.4、在客户端上测试（在Server上操作）：
+[root@linux-Server ~]# mkdir /mnt/dreplica  //创建挂载目录
+[root@linux-Server ~]# mount.glusterfs 192.168.224.11:/dreplica-volume /mnt/dreplica/   #挂载
+[root@linux-Server ~]# df -hT   #查看是否挂载成功
+Filesystem                   Type            Size  Used Avail Use% Mounted on
+/dev/mapper/centos-root      xfs              18G  3.9G   14G  23% /
+devtmpfs                     devtmpfs        479M     0  479M   0% /dev
+tmpfs                        tmpfs           489M     0  489M   0% /dev/shm
+tmpfs                        tmpfs           489M  6.8M  483M   2% /run
+tmpfs                        tmpfs           489M     0  489M   0% /sys/fs/cgroup
+/dev/sda1                    xfs             497M  125M  373M  26% /boot
+tmpfs                        tmpfs            98M     0   98M   0% /run/user/0
+192.168.224.11:/test-volume  fuse.glusterfs   53G   13G   40G  24% /mnt/a1
+192.168.224.11:/repl-volume  fuse.glusterfs   18G  4.5G   14G  26% /mnt/a2
+192.168.224.11:/riad0-volume fuse.glusterfs   53G   13G   40G  24% /mnt/a3
+192.168.224.11:/dreplica-volume fuse.glusterfs   18G  4.5G   14G  26% /mnt/dreplica
+
+ 
+
+[root@linux-Server ~]# echo 1 > /mnt/dreplica/1.txt   #写入内容
+[root@linux-Server ~]# echo 1 > /mnt/dreplica/2.txt
+[root@linux-Server ~]# echo 1 > /mnt/dreplica/3.txt
+[root@linux-Server ~]# echo 1 > /mnt/dreplica/4.txt
+
+ 
+
+
+
+8.5、查看结果（在client1、client2、client3上操作）：
+[root@linux-client1 ~]# tree /opt/gluster/
+...
+├── exp10
+│   └── 4.txt
+├── exp11
+│   ├── 1.txt
+│   ├── 2.txt
+│   └── 3.txt
+...
+
+
+[root@linux-client2 ~]# tree /opt/gluster/
+/opt/gluster/
+├── exp10
+│   └── 4.txt
+├── exp11
+│   ├── 1.txt
+│   ├── 2.txt
+│   └── 3.txt
+...
+
+ 
+[root@linux-client3 ~]# tree /opt/gluster/
+/opt/gluster/
+├── exp10
+│   └── 4.txt
+├── exp11
+│   ├── 1.txt
+│   ├── 2.txt
+│   └── 3.txt
+...
+
+ 
+
+ ==========================================================
+
+
+
+
+
+
+ ============================================================
+
+添加扩容和删除卷（https://gluster.readthedocs.io/en/latest/Administrator%20Guide/Managing%20Volumes/）：
+
+
+添加扩容卷分布式卷：
+9.1、在客户端写入数据（在Server上操作）：
+
+[root@linux-Server ~]# touch /mnt/a1/{10..19}.txt
+
+[root@linux-Server ~]# ll /mnt/a1/
+total 1
+-rw-r--r-- 1 root root 0 Sep 18 11:39 10.txt
+-rw-r--r-- 1 root root 0 Sep 18 11:39 11.txt
+-rw-r--r-- 1 root root 0 Sep 18 11:39 12.txt
+-rw-r--r-- 1 root root 0 Sep 18 11:39 13.txt
+-rw-r--r-- 1 root root 0 Sep 18 11:39 14.txt
+-rw-r--r-- 1 root root 0 Sep 18 11:39 15.txt
+-rw-r--r-- 1 root root 0 Sep 18 11:39 16.txt
+-rw-r--r-- 1 root root 0 Sep 18 11:39 17.txt
+-rw-r--r-- 1 root root 0 Sep 18 11:39 18.txt
+-rw-r--r-- 1 root root 0 Sep 18 11:39 19.txt
+-rw-r--r-- 1 root root 4 Sep 18 10:36 test1.txt
+
+ 
+
+ 
+
+9.2、创建一个目录并添加卷（在client1上操作）：
+
+[root@linux-client1 ~]# mkdir /opt/gluster/exp12  //创建要添加的目录
+
+[root@linux-client1 ~]# gluster volume add-brick test-volume 192.168.224.11:/opt/gluster/exp12/ force     //添加卷
+
+volume add-brick: success
+
+[root@linux-client1 ~]# gluster volume info test-volume   //查看
+Volume Name: test-volume
+Type: Distribute
+Volume ID: e2248fcf-a37c-44af-92ce-9e31a3a98764
+Status: Started
+Snapshot Count: 0
+Number of Bricks: 4
+Transport-type: tcp
+Bricks:
+Brick1: 192.168.224.11:/opt/gluster/exp1
+Brick2: 192.168.224.12:/opt/gluster/exp2
+Brick3: 192.168.224.13:/opt/gluster/exp3
+Brick4: 192.168.224.11:/opt/gluster/exp12
+Options Reconfigured:
+transport.address-family: inet
+nfs.disable: on
+
+[root@linux-client1 ~]# tree /opt/gluster/exp12/  //查看没有数据过来，是因为没有开启均衡
+/opt/gluster/exp12/
+0 directories, 0 files
+
+[root@linux-client1 ~]# gluster volume rebalance test-volume start //现在开启均衡
+
+volume rebalance: test-volume: success: Rebalance on test-volume has been started successfully. Use rebalance status command to check status of the rebalance process.
+
+ID: bcb58321-2f43-4b09-96a1-5833d020b7b2
+
+[root@linux-client1 ~]# tree /opt/gluster/exp12/   //再次验证就有数据了
+/opt/gluster/exp12/
+├── 11.txt
+├── 14.txt
+└── 16.txt
+
+ 
+
+ 
+
+10、删除卷：
+
+ 
+
+[root@linux-client1 ~]# gluster volume remove-brick test-volume 192.168.224.11:/opt/gluster/exp12 start
+
+Running remove-brick with cluster.force-migration enabled can result in data corruption. It is safer to disable this option so that files that receive writes during migration are not migrated.
+
+Files that are not migrated can then be manually copied after the remove-brick commit operation.
+
+Do you want to continue with your current cluster.force-migration settings? (y/n) y
+
+volume remove-brick start: success
+
+ID: 248846f3-c47d-4097-bcd1-6fc625d95d66
+
+ 
+
+10.1、删除后验证数据是否还在：
+
+[root@linux-client1 ~]# tree /opt/gluster/exp12/  //在client1的目录exp12上没有数据了
+/opt/gluster/exp12/
+
+ 
+
+ 
+
+10.2、数据分到了client3上：
+
+[root@linux-client3 ~]# tree /opt/gluster/  //数据11、14、16分过来了
+/opt/gluster/
+├── exp3
+│   ├── 10.txt
+│   ├── 11.txt
+│   ├── 12.txt
+│   ├── 14.txt
+│   ├── 15.txt
+│   ├── 16.txt
+│   └── 18.txt
+
+
+
+
+
+
+
+
+
+
+
+==================================
+总结：
+第一，分布卷: 存储与多个不同的位置
+第二，复制卷：相同副本存储于多个不同位置。
+第三，条带卷： 文件的内容分散在多个位置。
+第四，分布式条带卷（复合型）： 在条带的基础上，服务器数目是2倍以及上
+第五，分布式复制卷（复合型）： 在复制的基础上，服务器数目是2倍及以上。
+第六， 条带复制卷（复合型）： 在条带的基础上，创建多个拷贝。
+第七，分布式条带复制卷(三種混合型)： 在条带/复制的基础上。服务器数目是2倍及以上。
+
+
+
+第一，分布卷
+	gluster volume create test-volume 
+	server1:/exp1 
+	server2:/exp2 
+	server3:/exp3 
+	server4:/exp4
+
+第二，复制卷
+gluster volume create test-volume 
+	replica 2 
+	transport tcp 
+	server1:/exp1 
+	server2:/exp2
+
+
+第三，条带卷
+gluster volume create test-volume 
+	stripe 2 
+	transport tcp 
+	server1:/exp1 server2:/exp2
+
+
+第四，分布式条带卷（复合型） 
+分布式的条带卷，volume中brick所包含的存储服务器数必须是stripe的倍数(>=2倍)，兼顾分布式和条带式的功能。每个文件分布在四台共享服务器上，通常用于大文件访问处理，最少需要 4 台服务器才能创建分布条带卷。)
+
+gluster volume create test-volume 
+	stripe 2 
+	transport tcp 
+	server1:/exp1 
+	server2:/exp2
+	server3:/exp3 
+	server4:/exp4 
+
+
+
+第五，分布式复制卷（复合型）
+分布式的复制卷，volume中brick所包含的存储服务器数必须是 replica 的倍数(>=2倍)，兼顾分布式和复制式的功能。
+gluster volume create test-volume 
+	replica 2 
+	transport tcp 
+	server1:/exp1 
+	server2:/exp2 
+	server3:/exp3 
+	server4:/exp4 
+
+
+第六， 条带复制卷（复合型）
+gluster volume create 
+	test-volume 
+	stripe 2 
+	replica 2 
+	transport tcp 
+	server1:/exp1
+	server2:/exp2 
+	server3:/exp3 
+	server4:/exp4 
+
+
+第七，分布式条带复制卷(三種混合型)
+gluster volume create 
+	test-volume 
+	stripe 2 
+	replica 2 
+	transport tcp 
+	server1:/exp1
+	server2:/exp2 
+	server3:/exp3 
+	server4:/exp4 
+	server5:/exp5 
+	server6:/exp6 
+	server7:/exp7 
+	server8:/exp8
+ ==========================
+
+
+
+
+
+
+
+
+
+=========================================
+raid0-volume 条带
+Type: Stripe
+Number of Bricks: 1 x 3 = 3
+Brick1: 192.168.224.11:/opt/gluster/exp7
+Brick2: 192.168.224.12:/opt/gluster/exp8
+Brick3: 192.168.224.13:/opt/gluster/exp9
+
+gluster volume create raid0-volume 
+stripe 3 transport tcp 
+192.168.224.11:/opt/gluster/exp7 
+192.168.224.12:/opt/gluster/exp8 
+192.168.224.13:/opt/gluster/exp9 force
+
+/mnt/a3/
+
+测试结果：
+短文件内容无法分布在多个位置。
+创建多个文件，所有文件在所有位置都是可见。
+
+
+
+
+repl-volume 复制
+Type: Replicate
+Number of Bricks: 1 x 3 = 3
+Brick1: 192.168.224.11:/opt/gluster/exp4
+Brick2: 192.168.224.12:/opt/gluster/exp5
+Brick3: 192.168.224.13:/opt/gluster/exp6
+
+volume create repl-volume 
+replica 3 
+transport tcp 
+192.168.224.11:/opt/gluster/exp4 
+192.168.224.12:/opt/gluster/exp5 
+192.168.224.13:/opt/gluster/exp6 force
+
+/mnt/a2/
+测试结果：
+文件内容所有位置都是可见。
+创建多个文件，所有文件在所有位置都是可见。
+
+
+
+
+test-volume 分布式
+Type: Distribute
+Number of Bricks: 4
+Brick1: 192.168.224.11:/opt/gluster/exp1 Brick2: 192.168.224.12:/opt/gluster/exp2
+Brick3: 192.168.224.13:/opt/gluster/exp3 Brick4: 192.168.224.11:/opt/gluster/exp12
+
+gluster volume create test-volume 
+192.168.224.11:/opt/gluster/exp1 
+192.168.224.12:/opt/gluster/exp2 
+192.168.224.13:/opt/gluster/exp3 force
+
+/mnt/a1/
+
+测试结果：
+创建多个文件，文件在分散在不同位置。
+文件内容可以看到。
+
+
+
+test1-volume 分布式复制
+Type: Distributed-Replicate
+Number of Bricks: 2 x 3 = 6
+Brick1: 192.168.224.11:/opt/gluster/exp10 Brick2: 192.168.224.12:/opt/gluster/exp10
+Brick3: 192.168.224.13:/opt/gluster/exp10 Brick4: 192.168.224.11:/opt/gluster/exp11
+Brick5: 192.168.224.12:/opt/gluster/exp11 Brick6: 192.168.224.13:/opt/gluster/exp11
+
+gluster volume create test1-volume 
+replica 3 
+transport tcp 
+192.168.224.11:/opt/gluster/exp10/ 192.168.224.12:/opt/gluster/exp10/ 192.168.224.13:/opt/gluster/exp10/ 192.168.224.11:/opt/gluster/exp11/ 192.168.224.12:/opt/gluster/exp11/ 192.168.224.13:/opt/gluster/exp11/ 
+
+/mnt/aaa 
+
+测试结果：
+所有文件都是复制3份，存储在6个位置。
+
+
+
+dstripe-volume 分布式条带
+Type: Distributed-Stripe
+Number of Bricks: 2 x 2 = 4
+
+Brick1: 192.168.224.11:/opt/gluster/dstripe1
+Brick2: 192.168.224.11:/opt/gluster/dstripe2
+Brick3: 192.168.224.12:/opt/gluster/dstripe1
+Brick4: 192.168.224.12:/opt/gluster/dstripe2
+Options Reconfigured:
+
+/mnt/dstripe-volume/
+测试结果：
+所有文件以条带方式分布式存储在多个不同位置。因为文件内容太少，无法完全条带化。 
+
+
+=======================================
+取消存储共享
+on Server:
+umount /mnt/a1
+
+on Client1:
+gluster volume stop test-volume
+gluster volume delete test-volume
+
+
+====================================
+gluster peer probe IP  添加集群成员
+gluster peer status。  查看集群状态
+gluster volume info  查看卷信息
+gluster volume status 查看卷状态
+gluster volume add-brick test-volume 192.168.224.11:/opt/gluster/exp12/ force    添加卷
+gluster volume remove-brick test-volume 192.168.224.11:/opt/gluster/exp12 start  删除卷
+gluster volume stop test-volume         停止卷
+gluster volume delete test-volume       删除卷
+

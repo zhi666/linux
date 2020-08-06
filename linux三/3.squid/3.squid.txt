@@ -1,0 +1,318 @@
+﻿--
+
+
+squid
+
+
+官网： http://www.squid-cache.org/
+
+
+squid软件主要有两大应用:
+1,代理上网(正向代理，透明代理）  --简单地看作是  有缓存的SNAT
+2,网站静态页面缓存加速（反向代理) --简单地看作是  有缓存的DNAT
+
+
+
+
+			client
+			  |
+			  |
+			因特网
+			  ｜
+			  ｜
+		　　　１个或多个反向代理(较近地理位置增强响应时间，静态缓存加速，网站数据切分)　　　cdn
+			　 |	
+			  前端web
+			   |
+			　中间件 
+			　　｜
+			　数据库
+			　　｜
+			　存储
+
+
+			client					国外客户
+			  |					　　|	
+			反向代理					海外仓储	
+			  |					　 |　
+			 web					国内公司
+
+
+=============================================================================================
+
+
+			client　 192.168.2.190　　　　　　  client
+			 ｜	
+			 ｜	
+			eth0	192.168.2.151
+			squid 服务器 						secretary
+			eth1	192.168.224.10		   
+			 |
+			 |
+			 |	
+			内网web服务器VM1          	   	
+			eth0							BOSS
+			192.168.224.11	
+
+
+
+原理流程:
+1,client请求（假设为一个图片)
+2,squid接收到此请求，在缓存中查找client的请求是否存在
+3,如果cache hit,则直接返回结果给client
+4,如果cache miss,则把请求转给后台web
+5,web把结果返回给squid，再返回给client
+6,squid会把这个图片缓存起来（符合条件才能缓存）,以备下一次客户端访问可以直接cache hit
+
+
+
+--注意:
+192.168.224.10为squid的一个内网IP
+192.168.2.x为squid的外网IP(也就是说在这个架构里squid在最前端)
+192.168.2.x 为外网客户端(有一个curl命令就可以测试了，所以这里用宿主机来模拟也需要改变宿主机的配置)
+
+
+第一步：
+在内网web服务器上安装httpd,并做一个主页用于测试
+```
+yum install httpd\* -y
+echo "内网web" > /var/www/html/index.html
+systemctl restart httpd
+
+```
+
+
+第二步:
+在squid服务器上安装，并进行配置
+```
+yum install squid -y
+```
+
+用一个新的配置文件；如果是在上面的透明代理基础上再做反向代理，先注释掉前面所有的配置
+```
+ vim /etc/squid/squid.conf
+
+56 http_access allow all		--ACL我这里直接允许所有（这一句前面的内容全删除)
+
+59 http_port 80 accel vhost vport
+			--accel 反向代理加速模式
+			--vhost 支持域名或主机名来表示代理节点
+			--vport 支持IP和端口来表示代理节点
+
+cache_peer 192.168.224.11 parent 80 0 no-query originserver name=web   --这一行默认没有，需要加上去
+代表缓存11机的内容
+		--192.168.224.11  内网web服务器的IP
+		--parent 上下关系，非平级关系
+		--80 代理内部web服务器的80端口
+		--0 没有使用icp，表示就一台squid服务器
+		--no-query 不去查询邻居，与上面的0结合使用
+		--originserver 表示源实际服务器
+		--name=web 定义一个名字，让后面的参数引用
+
+cache_peer_domain web server.example.com   --对client1.example.com的请求会给web这台服务器（也就是上面定义的192.168.224.11);如果有多台web的话，可以多台web绑定同一个域名，还可以实现RR轮循调度
+cache_peer_domain web 192.168.2.151	--光写上面一条，客户端只能通过client1.example.com访问，再加上这条，客户端就可以使用192.168.2.190来访问
+
+cache_dir ufs /var/spool/squid 256 16 256
+
+```
+启动squid
+```
+yum install openssl -y   # 需要安装OpenSSL，否则无法启动squid
+systemctl restart squid
+```
+
+
+测试：
+在宿主机访问： http://192.168.2.151  网页内容显示“内网Web”
+
+所以这里客户端的DNS解析server1.com应该得到192.168.2.151的结果
+
+所以这里不做DNS的话，就直接在/etc/hosts里写上
+192.168.2.151  server1.com
+
+使用http://192.168.224.11 就可以访问到内部的web服务器了
+
+可以使用curl -I http://server1.com去查有没有命中缓存
+
+
+注意：
+如果你要在windows上访问，需要对server1.com进行自定义域名解析
+修改文件 C:\Windows\System32\drivers\etc\host
+===================================================================================
+
+
+
+问题一:
+squid如何代理多个web?
+
+			client
+
+
+			squid
+
+
+	       web1  	web2	web3
+
+
+实验：
+继续上午的实验继续做
+
+
+1. 开启Client2和client3虚拟机，并安装启动httpd
+
+2. vim /etc/squid/squid.conf （替换原有的cache_peer和cache_peer_domain）
+```
+cache_peer 192.168.224.11 parent 80 0 no-query originserver round-robin name=web1
+cache_peer 192.168.224.12 parent 80 0 no-query originserver round-robin name=web2
+cache_peer 192.168.224.13 parent 80 0 no-query originserver round-robin name=web3
+
+cache_peer_domain web1 web2 web3 www.aaa.com
+cache_peer_domain web3 www.bbb.com
+
+```
+3. systemctl restart squid.
+
+4. vim /etc/hosts
+...
+192.168.224.10	www.aaa.com
+192.168.2.43	www.bbb.com
+
+验证：
+为了避免squid缓存生效使得请求无法抵达web服务器，可以访问一个不存在的资源
+例如： curl www.aaa.com/xxx
+然后访问web服务器上的 /var/log/httpd/access_log来观察squid如何进行轮询。
+
+Notes：根据我们的观察，发现在一个squid同时代理2个域名的时候，squid无法按照配置文件的要求来转发。
+
+
+
+
+问题二:
+如何配置下面的squid集群?
+
+
+
+
+
+			192.168.2.190
+			client	
+
+			www.abc.com
+		通过dns技术(dns轮循或智能dns)；通过负载均衡软件(nginx,haproxy,lvs)
+	
+
+
+	   192.168.2.151		    10.0.8.101	
+		squid1			squid2
+	   192.168.224.10	   192.168.224.13
+		
+
+		web1			web2
+	   192.168.224.11	  192.168.224.12 
+
+注意：
+要重置虚拟机
+
+
+准备过程
+1,主机名绑定
+192.168.224.10	server1..com  squid1
+192.168.224.13	client3.com squid2
+192.168.224.11	client1.com web1
+192.168.224.12	client2.com web2
+
+2,IP静态
+3,关闭防火墙，selinux
+4,时间同步
+5.使用系统默认的YUM源
+6.两台squid都需要增加一块物理桥接网卡（host-only仅主机模式也可以使用）
+
+
+配置过程
+第一步:
+两个web上安装httpd，并建立两个不同主页方便测试(注意这里所有的机器的时间一定要同步，特别是web1和web2；如果web1和web2的时间隔得太久，可能会造成客户端访问时，不先访问缓存而是访问后台web，也就是缓存失效了）
+```
+yum install httpd -y
+systemctl restart httpd
+
+```
+echo web1 > /var/www/html/index.html    #在web1上做
+echo web2 > /var/www/html/index.html   #在web2上做（两个主页不同，为了实验方便区分)
+```
+
+
+第二步:
+安装并配置squid1
+```
+yum install squid -y
+vim /etc/squid/squid.conf
+```
+
+```
+http_access allow all
+cache_dir ufs /var/spool/squid 256 16 256
+http_port 80 accel vhost vport
+
+icp_port 3130
+icp_access allow all
+cache_peer 192.168.224.13 sibling  80 3130
+cache_peer 192.168.224.11 parent 80 0 no-query originserver round-robin name=web1
+cache_peer 192.168.224.12 parent 80 0 no-query originserver round-robin name=web2
+cache_peer_domain web1 web2 www.abc.com
+```
+yum install openssl -y  
+systemctl restart squid
+
+第三步:
+安装并配置squid2
+把squid1的配置文件拷过来，只需要修改一个地方（就是sibling的IP)
+
+yum install squid -y
+vim /etc/squid/squid.conf
+```
+cache_peer 192.168.224.10 sibling 80 3130	 #把这个IP换成对方的IP
+```
+
+然后也启动服务
+
+yum install openssl -y 
+systemctl restart squid
+
+
+第四步:在客户端测试
+在宿主机上访问： http://192.168.2.151 和 http://10.0.8.101
+
+
+vim /etc/hosts		--绑定IP地址与域名来模拟DNS（注意这里不能实现DNS轮循,所以手动绑定其中指定解析为squid1或squid2）
+192.168.2.151	www.abc.com
+
+vim /etc/hosts
+10.0.8.101	www.abc.com
+
+
+结论：
+通过观察webserver access_log 我们可以看到HEAD和GET的请求类型，HEAD请求仅仅用于查询目标文件是否存在。GET用于获取内容。
+
+
+===========================================================================================
+
+
+课外项目:
+模拟cdn
+
+squid+dns-view实现
+
+				北京
+
+
+		     成都	武汉	  上海				
+								
+			
+				广州				
+			   （网站源在深圳）
+
+
+
+课后题目:
+上网查询并比较squid,varnish,ats,nginx等软件
+

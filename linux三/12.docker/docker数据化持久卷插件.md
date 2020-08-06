@@ -1,0 +1,74 @@
+docker数据持久卷插件
+
+作者地址  `https://github.com/MatchbookLab/local-persist `
+
+1、从“ 发行”页面下载适合您的操作系统和体系结构的二进制文件。
+2、重命名下载的文件 docker-volume-local-persist
+3、将其放入/usr/bin（您可以将其放置在其他位置，但是请确保您的Systemd（或类似名称）配置反映了所做的更改）。
+4、确保文件是可执行文件（chmod +x /usr/bin/docker-volume-local-persist）
+5、只需在此处运行它（键入docker-volume-local-persist并按Enter键）进行测试就足够了，等等，如果这就是您要尝试的全部，那么您就完成了。但是，如果您希望它从Docker开始，请继续执行步骤6。
+6、下载systemd.service
+7、将服务文件重命名为 docker-volume-local-persist.service
+8、移到 /etc/systemd/system/
+9、运行sudo systemctl daemon-reload以重新加载配置
+10、运行sudo systemctl enable docker-volume-local-persist以启用服务（它将在Docker之后启动）
+11、立即运行sudo systemctl start docker-volume-local-persist以启动它。如果已经启动，可以安全运行
+
+
+插件下载地址  `https://github.com/MatchbookLab/local-persist/releases/download/v1.3.0/local-persist-linux-amd64 `
+
+重命名下载的文件 docker-volume-local-persist
+```
+wget https://github.com/MatchbookLab/local-persist/releases/download/v1.3.0/local-persist-linux-amd64
+
+chmod +x local-persist-linux-amd64  && mv local-persist-linux-amd64 docker-volume-local-persist && mv docker-volume-local-persist /usr/bin/
+
+```
+**编辑服务文件**
+vim /etc/systemd/system/docker-volume-local-persist.service
+
+```
+# docker-volume-local-persist.service 文件内容为
+
+[Unit]
+Description=docker-volume-local-persist
+Before=docker.service
+Wants=docker.service
+
+[Service]
+TimeoutStartSec=0
+ExecStart=/usr/bin/docker-volume-local-persist
+
+[Install]
+WantedBy=multi-user.target
+```
+**启动服务，并开机自启**
+```
+systemctl daemon-reload && systemctl enable docker-volume-local-persist && systemctl start docker-volume-local-persist
+
+```
+用法：创建卷
+然后，可以使用此插件创建一个卷（此示例将用于图像的共享文件夹）：
+手动创建卷
+docker volume create -d local-persist -o mountpoint=/data/images --name=images
+
+参数说明： mountpoint=/data/images 代表卷的目录。 注意，只有使用了插件才可以使用mountpoint
+--name=images  代表卷的名字
+
+写docker-compose示例
+
+```
+volumes:
+  data01:
+    driver: local-persist
+    driver_opts:
+      mountpoint: /data/a
+  data10:
+    driver: local-persist
+    driver_opts:
+      mountpoint: /data/b
+
+```
+
+data01 代表卷的名字， /data/a/表示卷的物理路径。
+

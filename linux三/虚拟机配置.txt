@@ -1,0 +1,34 @@
+虚拟机安装：
+要求Server with GUI.(Linux必须要有图形化界面)
+NAT网卡：网段要设置为 192.168.224.x
+
+
+创建4台虚拟机分别为：
+192.168.224.10 	server.example.com
+192.168.224.11 	client1.example.com
+192.168.224.12 	client2.example.com
+192.168.224.13 	client3.example.com	
+
+设置命令如下：
+禁用防火墙：
+# su  
+# systemctl stop firewalld.service
+# systemctl disable firewalld.service
+修改服务器名字：
+# hostnamectl set-hostname --static server.example.com
+禁用SELinux
+# vim /etc/sysconfig/selinux
+...
+SELINUX=disabled
+...
+
+
+设置自定义域名解析：
+# vim /etc/hosts
+192.168.224.10 	server.example.com
+192.168.224.11 	client1.example.com
+192.168.224.12 	client2.example.com
+192.168.224.13 	client3.example.com	
+
+关机然后做快照
+

@@ -1,0 +1,412 @@
+--
+
+
+
+内存子系统
+
+
+同步 异步
+
+		client -- squid  -- web
+		web程序 -- memcache/redis --  mysql
+
+
+		CPU(进程)---内存(swap)---磁盘　　（异步)
+
+内存优点:速度非常快的存储介质
+　　缺点:相对磁盘，价格贵，存储空间小，存放数据不是永久存放
+
+
+内存包括物理内存和虚拟内存（swap)
+虚拟内存(Virtual Memory)把计算机的内存空间扩展到硬盘，
+物理内存(RAM)和硬盘的一部分空间(SWAP)组合在一起作为虚拟内存为计算机提供了一个连贯的虚拟内存空间，
+好处是我们拥有的内存 ”变多了“，可以运行更多、更大的程序，
+坏处是把部分硬盘当内存用整体性能受到影响，硬盘读写速度要比内存慢几个数量级，
+并且 RAM 和 SWAP 之间的交换增加了系统的负担。
+
+
+
+	虚拟内存
+把内存上暂时用不到的数据，但不能不用的数据，临时保存到磁盘（swap）或者磁盘文件(虚拟内存文件)中。或者物理内存不够用了，会使用到swap虚拟内存.
+但需要用到这些数据的时候，就重新从磁盘上读取到内存中。
+由内核kswapd进程完成
+
+
+
+  (查看进程kswapd)
+[root@server ~]# ps -ef |grep kswapd 
+root         41      2  0 18:23 ?        00:00:00 [kswapd0]
+root       7251   7181  0 21:35 pts/1    00:00:00 grep --color=auto kswapd
+
+
+
+# free	--rhel6下的free命令显示
+             total       used       free     shared    buffers     cached
+Mem:       3801928    3656892     145036          0      88336    2898552
+-/+ buffers/cache:     670004    3131924
+Swap:      4194296        796    4194296
+
+
+linux的内存使用和windows不一样，windows使用过的内存，当程序关闭会释放。linux使用过的内存，程序关闭也不释放，而是缓存(buffer+cached)
+
+
+
+注意生产环境不要使用下面的命令
+echo 3 > /proc/sys/vm/drop_caches  --此命令是扔掉内存中的缓存
+
+
+# free	--rhel7下的free命令显示
+              total        used        free      shared  buff/cache   available
+Mem:        7974908      528748     6898624      142192      547536     7027592
+Swap:       4095996           0     4095996
+
+
+
+
+
+
+	内存页（page） 默认是4K大小。这是操作内存数据的最小基本单位(类似于文件系统里的block)
+	内存分页（paging） 内核经常扫描内存，如果发现内存的空闲空间低于某个值，那么就会把内存上的数据同步到硬盘。
+这些一般都是曾经打开过的文件，这些文件数据加载到内存中，然后已经被修改过，
+
+# yum -y install maria\*
+# systemctl start mariadb
+# /usr/bin/time -v mysql  --此命令显示的倒数第二行有内存页的大小
+MariaDB [(none)]> exit
+......
+	Page size (bytes): 4096
+	Exit status: 1
+
+
+# /usr/bin/time -v date
+	...
+        Major (requiring I/O) page faults: 0	主要页面故障
+        Minor (reclaiming a frame) page faults: 204 次要页面故障
+	...
+        Page size (bytes): 4096 《－－内存页为4K
+
+
+
+主要页面故障：(类似于缓存未命中miss)
+	当执行某个进程的时候，进程需要读取某些数据，而这些数据在cache,buffer(在内存中)找不到，就会产生一次主要页面故障。
+
+次要页面故障: (类似于缓存命中hit)
+	进程在执行的时候，需要的数据在内存中可以找到，就叫做次要页面故障。
+
+系统为了提高访问效率，总是把数据缓存起来，以便在内存中直接操作数据，减少磁盘的读写。
+其实就是一个尽可能减少主要页面故障，增加次要页面故障的过程
+
+
+小实例测试：
+/usr/bin/time -v firefox    运行两次可以看到，第二次运行已经主要页面故障为0了，因为进程所需的数据已经在内存中,并且感觉到firefox打开速度变快
+
+
+echo 3 > /proc/sys/vm/drop_caches  --此命令是扔掉内存中的缓存
+
+然后再用/usr/bin/time -v firefox 执行,会发现主要页面故障又不为0了,而且明显感觉到firefox打开速度变慢.说明缓存没有命中
+
+
+		CPU（进程)---内存(swap)---磁盘　　（异步)
+
+
+总结:
+1, cpu速度快，磁盘速度慢，CPU运算需要从磁盘取数据，那么在中间加内存可以提高性能，做缓存
+2，内存包括物理内存和虚拟内存(swap)
+3，cpu要取数据，先找内存，内存能找到（内存hit)，则直接把数据给cpu,这样效率高;cpu如果在内存没有找到(内存miss)，则找磁盘，这样效率低；
+4,从磁盘取的数据会先放到内存缓存起来，以便cpu下次来就可以直接hit命中;如果内存的空间不够了，那么从磁盘取的新的数据会挤掉最近最少使用LRU（least recently used)的数据
+5,内核会在物理内存不够时,使用虚拟内存或者是物理内存有空闲时,也会使用虚拟内存(会使用最近最少使用算法 LRU,把最近不常用的也会给虚拟内存);也就是说物理内存够或者不够都可能会使用swap(不需要人为控制，由内核来控制)
+6,物理内存与虚拟内存交换的单位就是内存页,内存页大小为4096字节
+7,linux系统会把你访问过的程序或文件都缓存起来,甚至你的程序关闭也不释放相关的缓存.
+8，内存里被CPU处理过的数据（或者叫脏数据dirty data，这些数据最终要放回磁盘）会在满足特定条件时才会由pdflush进程写到磁盘(这些条件可以通过修改内核参数来实现优化)
+
+
+
+
+
+
+查看内存状态相关的命令
+free,top,vmstat,sar
+
+
+# vmstat
+procs -----------memory---------- ---swap-- -----io---- --system-- -----cpu-----
+ r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st
+ 0  0      0 2258668   7692 1052824    0    0   134    21  298  423  4  1 95  1  0	
+--从上面的比较可以看到，vmstat里的free，buff,cache的值对应free 命令里的free,buffers,cached
+si 有多少数据从swap到物理内存
+so 有多少数据从物理内存到swap
+
+bi 有多少数据从块设备读取到内存中
+bo 有多少数据从内存中写到块设备中
+
+	
+		CPU---内存(swap)---磁盘　　（异步)
+
+
+# sar -B 2 3 (停止2秒，读3次)
+Linux 2.6.32-279.el6.x86_64 (li.cluster.com) 	04/25/2014 	_x86_64_	(2 CPU)
+
+11:28:53 AM  pgpgin/s pgpgout/s   fault/s  majflt/s  pgfree/s pgscank/s pgscand/s pgsteal/s    %vmeff
+11:28:55 AM      0.00      0.00     45.23      0.00    368.34      0.00      0.00      0.00      0.00
+11:28:57 AM      0.00     19.90     78.11      0.00    533.33      0.00      0.00      0.00      0.00
+11:28:59 AM      0.00      0.00     46.50      0.00    177.50      0.00      0.00      0.00      0.00
+Average:         0.00      6.67     56.67      0.00    360.00      0.00      0.00      0.00      0.00
+
+pgpgin/s   每秒从磁盘page in内存的 kilobytes
+pgpgout/s  每秒从内存page out磁盘的 kilobytes
+fault/s	   每秒的（major+minor) page faults之和
+majflt/s   每秒的major page faults数
+
+--如果pgpgin和pgpgout很多,majflt/fault这个内存miss率很高.而且系统运行的程序也是固定的,这就有可能说明内存不够用了.造成缓存不了所有数据,以致内存命中率低
+
+
+
+到底怎么样才说明内存不够?
+结合free,vmstat,sar命令综合分析
+如果你使用vmstat看到swapd使用比较多，free+buff+cache的值很小，并且si和so比较频繁，说明可用内存很小，并且swap使用很多，swap交互也频繁，表明内存遇到瓶颈了
+如果你使用sar -B来看，看到pgpgin/s和pgpgout/s很频繁说明内存和磁盘交互很频繁。majflt/s除以fault/s得到内存MISS率变高，而且pgfree/s可用内存列表变小。也能说明内存不够了。
+
+
+
+==========================================================================================================
+
+
+
+内核参数的基本操作:
+sysctl -a   --查看当前所有内核参数及其对应的值
+
+内核参数配置文件 
+/etc/sysctl.conf
+修改保存后，sysctl -p让其生效
+例如:
+# sysctl -a |grep ip_forward	
+net.ipv4.ip_forward = 1
+这个参数对应的/proc路径为/proc/sys/net/ipv4/ip_forward
+
+# sysctl -a |grep file-max
+fs.file-max = 381908
+这个参数对应的/proc路径为/proc/sys/fs/file-max
+
+2,如何修改内核参数
+临时修改，重启后不生效；如
+# echo 1 > /proc/sys/net/ipv4/ip_forward
+# sysctl -w net.ipv4.ip_forward=1
+
+
+永久生效，需要修改/etc/sysctl.conf配置文件
+net.ipv4.ip_forward = 1		--修改，没有此参数就手动加上
+保存后，记得要用sysctl -p使之生效
+
+
+====================================================================================================
+
+
+与内存和swap有关的内核参数调整
+
+
+# cat /proc/sys/vm/swappiness
+60
+swappiness表示使用swap分区的使用程度,可以适当调整swappiness=0的时候表示尽可能使用物理内存空间.swappiness=100积极使用swap.
+
+--基本调优规则为:如果物理内存够大，那么就尽量不要使用swap，可以把此参数调小如swappiness=10.
+
+
+
+# sysctl -a |grep min_free	--内存一定保证的最小空闲空间
+vm.min_free_kbytes = 67584
+
+内存最小的free预留值。调太大，会造成可用内存减小。调太小，可能会造成系统急用内存时没有足够的预留。
+
+
+
+# cat /proc/sys/vm/dirty_background_ratio 
+10
+--这里表示内存里的脏数据(dirty data)到达10％，会触发写到磁盘
+
+
+
+# cat /proc/sys/vm/dirty_ratio 
+20 
+
+--这里表示内存里的脏数据到达20％时，就不能再写入脏数据了，也就表示要让应用程序等待了，等这个值下降，才能继续写
+
+
+
+
+--这两个参数合起来理解就是:内存脏数据到dirty_background_ratio定义的10％时，就会触发数据写到磁盘（但是这个过程是异步的，也就是说还是会有别的应用程序的脏数据能继续写到内存），如果应用程序往内存里写的比内存往磁盘里写得快，还是有可能达到dirty_ratio定义的20%时，那么就要让写脏数据的应用程序等待，直到它降低到20％以下，再继续写
+
+
+
+理解了上面两个参数的意思，现在如何来调整
+1，dirty_background_ratio (内存写到磁盘)
+把它调大，会提高写入磁盘速度（因为一次写的数据量大）；但这样也有缺点，有可能一次写的数据量过大，造成磁盘IO峰值。还有就是如果物理内存不够，调大，会压缩物理内存缓存的空间，会进一步造成内存命中率下降.
+把它调小，虽然速度会较慢，但可以削平IO峰值
+
+
+
+2,dirty_ratio (cpu写到内存)
+在应用程序写内存繁忙时，可以把dirty_ratio调大，可以缓解应用程序的等待。如果物理内存不够，调大，会压缩物理内存缓存的空间，会进一步造成内存命中率下降.
+
+
+
+==============================================================================================
+
+
+
+IO子系统
+
+		IO，输出输入 input and ouput。
+	一个IO，指的是从磁盘把数据读出来或者把数据写到磁盘上，就称之为一个IO，一个IO读写的大小为一个OS block.(linux下默认为4096字节,但rhel6的boot分区默认为1024字节)
+
+
+
+# iostat 
+Linux 2.6.32-279.el6.x86_64 (li.cluster.com) 	04/25/2014 	_x86_64_	(2 CPU)
+
+avg-cpu:  %user   %nice %system %iowait  %steal   %idle
+           9.72    0.57    1.34    1.71    0.00   86.66
+
+Device:            tps   Blk_read/s   Blk_wrtn/s   Blk_read   Blk_wrtn
+sda              24.47      2157.44        43.86   17100165     347648
+md127             0.02         0.13         0.00       1016          0
+dm-0              0.01         0.08         0.00        672          0
+
+  %user
+  CPU在用户态执行进程的时间百分比。
+
+  %nice
+  CPU在用户态模式下，用于nice操作，所占用CPU总时间的百分比
+
+  %system
+  CPU处在内核态执行进程的时间百分比
+
+  %iowait
+  CPU用于等待I/O操作占用CPU总时间的百分比
+
+  %steal
+  管理程序(hypervisor)为另一个虚拟进程提供服务而等待虚拟CPU的百分比
+
+  %idle
+  CPU空闲时间百分比
+
+
+
+
+# iostat 2 	--每两秒显示所有的分区IO状态
+# iostat /dev/sda*  2  --每两秒显示所有磁盘的io状态 
+tps    每秒的IO传输次数
+Blk_read/s  每秒读了多少个block(一个block单位为512bytes)
+Blk_wrtn/s  每秒写了多少个block	
+Blk_read    两次查看的时间间隔内，一共读了多少块（Blk_read/s乘以两次查看时间间隔秒数），如果只看一次，或者看多次的第一次，是表示从开机到现在读的总量
+Blk_wrtn    两次查看的时间间隔内，一共写了多少块（Blk_wrtn/s乘以两次查看时间间隔秒数）,如果只看一次，或者看多次的第一次，是表示从开机到现在总的读的总量
+
+
+
+# iostat -kx -d sda 2 3	
+--查看sda的IO状态报告，每两秒打印一次，总共三次 ； -k是表示把默认以每秒多少块显示成每次多少KB；-x打印了一些扩展选项
+Linux 2.6.32-279.el6.x86_64 (li.cluster.com) 	04/25/2014 	_x86_64_	(2 CPU)
+
+Device:         rrqm/s   wrqm/s     r/s     w/s    rkB/s    wkB/s avgrq-sz avgqu-sz   await  svctm  %util
+sda               7.82     4.13   22.09    1.29  1028.68    21.69    89.83     0.15    6.45   2.02   4.72
+
+Device:         rrqm/s   wrqm/s     r/s     w/s    rkB/s    wkB/s avgrq-sz avgqu-sz   await  svctm  %util
+sda               0.00     0.00    0.00    0.00     0.00     0.00     0.00     0.00    0.00   0.00   0.00
+
+Device:         rrqm/s   wrqm/s     r/s     w/s    rkB/s    wkB/s avgrq-sz avgqu-sz   await  svctm  %util
+sda               0.00     3.50    0.00    3.00     0.00    26.00    17.33     0.02    8.00   7.50   2.25
+
+
+rrqm/s	每秒的读请求数
+wrqm/s	每秒的写请求数
+r/s	每秒完成多少个读IO
+w/s	每秒完成多少个写IO <--  IOPS=(r/s+w/s)
+rsec/s	每秒读取了多少扇区的数据。 一个扇区＝512字节数据
+wsec/s	每秒写了多少扇区的数据。
+rkB/s   每秒读了多少kb数据
+wkB/s	每秒写了多少kb数据
+
+avgrq-sz  平均请求数据的大小
+avgqu-sz  是平均请求队列的长度。毫无疑问，队列长度越短越好。
+await 平均完成IO需要等待多少时间, 包含服务时间，还有在队列中等待的时间。
+r_await	 centos7里多了这一列，表示读请求的await
+w_await  centos7里多了这一列，表示写请求的await
+svctm 服务时间，从IO请求产生到，完成IO的时间。
+%util 磁盘带宽使用百分比。如果一直都是100％，说明磁盘很忙。
+
+
+其它查IO相关的命令
+
+# vmstat 
+bi:表示读的block数
+bo:表示写的block数
+
+
+# sar -b	--可以查看历史的io读写信息
+
+iostat 测试出存储的性能问题
+https://www.dell.com/community/%E6%95%B0%E6%8D%AE%E5%AD%98%E5%82%A8%E5%92%8C%E4%BF%9D%E6%8A%A4-%E8%B5%84%E6%96%99%E6%96%87%E6%A1%A3/iostat-%E6%B5%8B%E8%AF%95%E5%87%BA%E5%AD%98%E5%82%A8%E7%9A%84%E6%80%A7%E8%83%BD%E9%97%AE%E9%A2%98/ta-p/7184959
+
+==========================================================================================================
+
+
+
+
+网络子系统 
+
+
+网络的监测是所有 Linux 子系统里面最复杂的，有太多的因素在里面，
+比如：延迟、阻塞、冲突、丢包等，更糟的是与 Linux 主机相连的路由器、
+交换机、无线信号都会影响到整体网络并且很难判断是因为 Linux 网络子系统的问题还是别的设备的问题，
+增加了监测和判断的复杂度。现在我们使用的所有网卡都称为自适应网卡，
+意思是说能根据网络上的不同网络设备导致的不同网络速度和工作模式进行自动调整。
+
+
+线序:
+568B	橙白	橙	绿白	蓝	蓝白	绿	棕白	棕
+568A	1，3对换，2，6对换	
+绿白	绿	橙白	蓝	蓝白	橙	棕白	棕
+		
+			　　　　交换机
+			 |--------------------|
+		         |		|      |
+			    PC1		PC2    PC3
+
+
+			PC1 ------------ PC2
+
+
+
+
+检查是否通电
+	# mii-tool ens33		--如果是centos7,默认网卡不叫eth0,使用ip addr命令查看
+eth0: negotiated 100baseTx-FD, link ok	--看到link ok，说明网线连接正常，但并不代表网线完全正常（可能水晶头松了或信号线接触不良等）
+
+
+
+检测网卡的当前负载
+
+	# sar -n DEV 2 
+
+02:09:37 PM     IFACE   rxpck/s   txpck/s    rxkB/s    txkB/s   rxcmp/s   txcmp/s  rxmcst/s
+02:09:39 PM        lo      0.00      0.00      0.00      0.00      0.00      0.00      0.00
+02:09:39 PM      eth0    659.69    255.10     40.16    344.18      0.00      0.00      0.00
+02:09:39 PM       br0    659.69    255.10     31.14    344.18      0.00      0.00      2.55
+02:09:39 PM    vmnet1      0.00      0.00      0.00      0.00      0.00      0.00      0.00
+02:09:39 PM    vmnet2      0.00      0.00      0.00      0.00      0.00      0.00      0.00
+02:09:39 PM    virbr0      0.00      0.00      0.00      0.00      0.00      0.00      0.00
+02:09:39 PM virbr0-nic      0.00      0.00      0.00      0.00      0.00      0.00      0.00
+
+
+rxpck/s   每秒收到的数据包数
+txpck/s	  每秒发送的数据包数
+rxkB/s	  每秒收到的kb
+txkB/s	  每秒发送的kb
+
+
+两台主机之间有网线(或无线)、路由器、交换机等设备，
+测试两台主机之间的网络性能的一个办法就是在这两个系统之间互发数据并统计结果，看看吞吐量、延迟、速率如何。
+iptraf 就是一个很好的查看本机网络吞吐量的好工具，支持文字图形界面，很直观。
+
+
+	yum install iptraf (本地镜像yum源,centos7里叫iptraf-ng)
+	# iptraf-ng		--直接打开，选择你要查看统计数据

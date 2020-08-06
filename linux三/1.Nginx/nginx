@@ -1,0 +1,74 @@
+
+# ulimit -SHn 65535
+# echo "ulimit -SHn 65535" >> /etc/rc.local （设置永久生效）
+
+# For more information on configuration, see:
+#   * Official English Documentation: http://nginx.org/en/docs/
+#   * Official Russian Documentation: http://nginx.org/ru/docs/
+user nginx;
+worker_processes auto;
+error_log /var/log/nginx/error.log;
+pid /run/nginx.pid;
+# Load dynamic modules. See /usr/share/nginx/README.dynamic.
+worker_rlimit_nofile 65535;
+include /usr/share/nginx/modules/*.conf;
+events {
+    use epoll;           #使用epoll 的I/O 模型
+    multi_accept on;
+    worker_connections 65535;
+}
+http {
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+    access_log  /var/log/nginx/access.log  main;
+    sendfile            on;
+    tcp_nopush          on;
+    tcp_nodelay         on;
+    keepalive_timeout   65;
+    types_hash_max_size 2048;
+    proxy_connect_timeout 300;     #连接超时时间
+    proxy_send_timeout 300;       #是后端服务器的超时时间 
+    proxy_read_timeout 300;    #该指令设置与代理服务器的读超时时间
+    proxy_buffer_size 256k;    #是设置缓存区的大小
+    proxy_buffers 128 32k;     #设置大小比上面小
+    proxy_busy_buffers_size 512k;  #
+    proxy_temp_file_write_size 256k;
+    proxy_max_temp_file_size 128m;
+    proxy_redirect off;
+    proxy_headers_hash_max_size 51200; #设置头部哈希表的最大值，不能小于你后端服务器设置的头部总数
+    proxy_headers_hash_bucket_size 6400; #设置头部哈希表大小
+    proxy_next_upstream error timeout invalid_header http_500 http_503 http_404;
+
+
+    proxy_temp_path  /dev/shm/proxy_temp;
+    proxy_cache_path /dev/shm/proxy_cache levels=1:2 keys_zone=cache_one:300m inactive=1d max_size=1g;
+
+    gzip  on;
+    gzip_min_length  1k;
+    gzip_buffers     16 16k;
+    gzip_http_version 1.1;
+    gzip_comp_level 2;
+    gzip_types       text/plain application/x-javascript text/css application/xml; 
+    gzip_vary on;
+    
+    limit_req_zone $binary_remote_addr zone=one:10m rate=5r/s;
+    limit_conn_zone $binary_remote_addr zone=addr:10m;
+    server_tokens off;  #隐藏nginx的版本号
+    server_names_hash_bucket_size 512;
+
+    client_header_buffer_size 256k;
+    large_client_header_buffers 4 256k;
+
+    #size limits
+    client_max_body_size    50m;  #允许客户端请求的最大单文件字节数
+    client_body_buffer_size 256k; #缓冲区代理缓冲用户端请求的最大字节数，
+    client_header_timeout   3m;
+    client_body_timeout 3m;
+    send_timeout   3m;
+    include             /etc/nginx/mime.types;
+    default_type        application/octet-stream;
+    include /etc/nginx/conf.d/*.conf;
+    include /etc/nginx/kis/站点配置文件/*.conf; 
+    include /etc/nginx/kis/站点配置文件/qiguanwang/*.conf;  #导入相关子配置文件
+}

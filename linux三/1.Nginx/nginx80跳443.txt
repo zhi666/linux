@@ -1,0 +1,309 @@
+
+一、主配置： 
+ # For more information on configuration, see: 
+ #   * Official English Documentation: http://nginx.org/en/docs/ 
+ #   * Official Russian Documentation: http://nginx.org/ru/docs/ 
+  
+ user nginx; 
+ worker_processes auto; 
+ error_log /var/log/nginx/error.log; 
+ pid /run/nginx.pid; 
+  
+ # Load dynamic modules. See /usr/share/nginx/README.dynamic. 
+ include /usr/share/nginx/modules/*.conf; 
+  
+ events { 
+     worker_connections 1024; 
+ } 
+  
+ http { 
+     log_format  main  '$remote_addr - $remote_user [$time_local] "$request" ' 
+                       '$status $body_bytes_sent "$http_referer" ' 
+                       '"$http_user_agent" "$http_x_forwarded_for"'; 
+  
+     access_log  /var/log/nginx/access.log  main; 
+  
+     sendfile            on; 
+     tcp_nopush          on; 
+     tcp_nodelay         on; 
+     keepalive_timeout   65; 
+     types_hash_max_size 2048; 
+     server_tokens off; 
+     server_names_hash_bucket_size 512; 
+  
+     include             /etc/nginx/mime.types; 
+     default_type        application/octet-stream; 
+  
+     # Load modular configuration files from the /etc/nginx/conf.d directory. 
+     # See http://nginx.org/en/docs/ngx_core_module.html#include 
+     # for more information. 
+     include /etc/nginx/conf.d/*.conf; 
+  
+     #server { 
+     #    listen       80 default_server; 
+     #    listen       [::]:80 default_server; 
+     #    server_name  _; 
+     #    root         /usr/share/nginx/html; 
+ 
+         # Load configuration files for the default server block. 
+         include /etc/nginx/kis/*.conf; 
+  
+   #      location / { 
+    #     } 
+  
+     #    error_page 404 /404.html; 
+      #       location = /40x.html { 
+       #  } 
+  
+        # error_page 500 502 503 504 /50x.html; 
+         #    location = /50x.html { 
+         #} 
+    # } 
+  
+ # Settings for a TLS enabled server. 
+ # 
+ #    server { 
+ #        listen       443 ssl http2 default_server; 
+ #        listen       [::]:443 ssl http2 default_server; 
+ #        server_name  _; 
+ #        root         /usr/share/nginx/html; 
+ # 
+ #        ssl_certificate "/etc/pki/nginx/server.crt"; 
+ #        ssl_certificate_key "/etc/pki/nginx/private/server.key"; 
+ #        ssl_session_cache shared:SSL:1m; 
+ #        ssl_session_timeout  10m; 
+ #        ssl_ciphers HIGH:!aNULL:!MD5; 
+ #        ssl_prefer_server_ciphers on; 
+ # 
+ #        # Load configuration files for the default server block. 
+ #        include /etc/nginx/default.d/*.conf; 
+ # 
+ #        location / { 
+ #        } 
+ # 
+ #        error_page 404 /404.html; 
+ #            location = /40x.html { 
+ #        } 
+ # 
+ #        error_page 500 502 503 504 /50x.html; 
+ #            location = /50x.html { 
+ #        } 
+ #    } 
+  
+ } 
+  
+  ============================================================
+第一大步：在上图中的lnmp服务器上安装并配置后面的网站
+
+	1.在192.168.224.11安装lnmp相关的rpm包
+	yum install epel-release -y
+	yum -y install nginx
+	yum install mariadb mariadb-server php php-mysql php-gd libjpeg\* php-ldap php-odbc php-pear php-xml php-xmlrpc php-mbstring php-bcmath php-mhash php-fpm  php-pecl-zendopcache  -y
+	Note: php-pecl-zendopcache需要elep
+
+	systemctl restart mariadb.service
+	systemctl enable mariadb.service
+	systemctl status mariadb.service
+
+	vim /etc/php-fpm.d/www.conf
+		12  listen = /var/run/php-fpm/fastcgi.socket
+		31 listen.owner = nginx
+		32 listen.group = nginx		--socket文件的权限设置。用户与组和跑nginx服务的用户一致，避免权限问题（如果前面使用的是tcp/ip的方式，这里就注释就好)
+		39 user = nginx			--用户与组和跑nginx服务的用户一致，避免权限问题	
+		41 group = nginx
+		
+                               218 php_flag[display_errors] = on	--打开php错误显示功能，取消注释
+	# chown nginx.nginx /var/run/php-fpm/
+
+	启动php-fpm服务
+	# systemctl start php-fpm.service
+	# systemctl status php-fpm.service 
+	# systemctl enable php-fpm.service
+
+  
+二、http跳转到https 
+ 
+ server { 
+         listen           80 ; 
+       listen           443 ssl; 
+         server_name  1669.com www.1669.com; 
+         charset       utf-8; 
+         index           index.html; 
+         root             /software/bodog/1669.com; 
+       if ($scheme = http ) { 
+       return 301 https://$host$request_uri; 
+         } 
+         ssl_certificate /etc/pki/nginx/51bclc.com_chain.crt; 
+         ssl_certificate_key   /etc/pki/nginx/51bclc.com_key.key  ; 
+ * 
+         # Load configuration files for the default server block. 
+         include /etc/nginx/default.d/*.conf; 
+  
+         location / { 
+         } 
+         location ~ \.php$ { 
+         root                   /software/html/365k.com; 
+         fastcgi_pass    127.0.0.1:9000; 
+         fastcgi_index   index.php; 
+         fastcgi_param   SCRIPT_FILENAME $document_root$fastcgi_script_name; 
+         include         fastcgi_params; 
+         }         
+ } 
+ 
+三、多域名跳转 
+  
+ server { 
+         listen       80 ; 
+         listen       443 ssl; 
+         server_name  www.16690011.com www.16690022.com www.16690033.com www.16690044.com www.16690055.com www.16690066.com www.16690077.com www.16690088.com www.16690099.com www.16690011.net www.16690022.net www.16690033.net www.16690044.net www.16690055.net www.16690066.net www.16690077.net www.16690088.net www.16690099.net www.16690011.cc www.16690022.cc www.16690033.cc www.16690044.cc www.16690055.cc www.16690066.cc www.16690077.cc www.16690088.cc www.16690099.cc 16690011.com 16690022.com 16690033.com 16690044.com 16690055.com 16690066.com 16690077.com 16690088.com 16690099.com 16690011.net 16690022.net 16690033.net 16690044.net 16690055.net 16690066.net 16690077.net 16690088.net 16690099.net 16690011.cc 16690022.cc 16690033.cc 16690044.cc 16690055.cc 16690066.cc 16690077.cc 16690088.cc 16690099.cc 1669k.com dog9999.com bodog888.biz bogou200.com bogou400.com bogou900.com bogou100.vip bogou200.vip bogou300.vip bogou400.vip bogou500.vip bogou600.vip bogou700.vip bogou800.vip bogou900.vip bogou100.cc bogou200.cc bogou300.cc bogou400.cc bogou500.cc bogou600.cc bogou700.cc bogou800.cc bogou900.cc 1669001.com 1669002.com 1669003.com 1669004.com 1669005.com 1669006.com 1669007.com 1669008.com 1669009.com 1669001.net 1669002.net 1669003.net 1669004.net 1669005.net 1669006.net 1669007.net 1669008.net 1669009.net bodog889.com 1669v.com 1669g.com 1669aa.com 1669bb.com 1669cc.com 1669dd.com 1669ee.com 1669ff.com 1669gg.com 1669hh.com 1669ii.com 1669jj.com 1669kk.com 1669ll.com 1669mm.com 1669nn.com 1669oo.com 1669pp.com 1669qq.com 1669rr.com 1669ss.com 1669tt.com 1669uu.com 1669vv.com 1669ww.com 1669xx.com 1669yy.com 1669zz.com 16691188.cc 16692288.cc 16693388.cc 16694488.cc 16695588.cc 16696688.cc 16697788.cc 16698888.cc 16699988.cc 16691188.net 16692288.net 16693388.net 16694488.net 16695588.net 16696688.net 16697788.net 16698888.net 16699988.net 16691188.com 16692288.com 16693388.com 16694488.com 16695588.com 16696688.com 16697788.com 16698888.com 16699988.com 16690011.cc 16690022.cc 16690033.cc 16690044.cc 16690055.cc 16690066.cc 16690077.cc 16690088.cc 16690099.cc; 
+         charset      utf-8; 
+         index      index.html; 
+                   root                 /software/bodog/1669800.com; 
+         #if ($server_port = 80 ) { 
+         return 301 https://www.1669800.com$request_uri; 
+         #} 
+  
+         # Load configuration files for the default server block. 
+         include /etc/nginx/default.d/*.conf; 
+  
+         location / { 
+         } 
+         location ~ \.php$ { 
+         root        /software/bodog/1669800.com; 
+         fastcgi_pass      127.0.0.1:9000; 
+         fastcgi_index     index.php; 
+         fastcgi_param   SCRIPT_FILENAME $document_root$fastcgi_script_name; 
+         include                fastcgi_params; 
+         } 
+ } 
+ 
+四、不带证书，且输入https://+域名跳转到http 
+  
+  
+ server { 
+         listen       80 ; 
+         listen       443 ssl; 
+         server_name  bwin688.com www.bwin688.com; 
+         charset    utf-8; 
+         index        index.html; 
+         root          /software/bwin/bwin688.com; 
+         if ($scheme = https ) { 
+         return 301 http://$host$request_uri; 
+         } 
+ #      ssl_certificate_key /etc/nginx/conf/bwin688/Nginx/2_bwin88.com.key; 
+ #      ssl_certificate /etc/nginx/conf/bwin688/Nginx/1_bwin88.com_bundle.crt; 
+  
+         # Load configuration files for the default server block. 
+         include /etc/nginx/default.d/*.conf; 
+  
+         location / { 
+         } 
+         location ~ \.php$ { 
+         root                   /software/bwin/bwin688.com; 
+         fastcgi_pass    127.0.0.1:9000; 
+         fastcgi_index   index.php; 
+         fastcgi_param   SCRIPT_FILENAME $document_root$fastcgi_script_name; 
+         include              fastcgi_params; 
+         }         
+ } 
+ 
+五、实现http/s+域名/接数字/字符 都能跳回例：https://www.1669.com 
+  
+ server { 
+         listen          80 ; 
+       listen          443 ssl; 
+         server_name  1669.com www.1669.com; 
+         charset      utf-8; 
+         index         index.html; 
+         root           /software/bodog/1669.com; 
+       if ($scheme = http ) { 
+       return 301 https://$host$request_uri; 
+         }
+rewrite ^/[0-9a-zA-Z]+$ https://$host/ break;      ----只要后面接0-9/a-z/A-Z都会被拉回到，https://www.1669.com 
+         ssl_certificate_key /etc/nginx/conf/1669/Nginx/2_1669.com.key; 
+         ssl_certificate /etc/nginx/conf/1669/Nginx/1_1669.com_bundle.crt; 
+  
+         # Load configuration files for the default server block. 
+         include /etc/nginx/default.d/*.conf; 
+  
+         location / { 
+          } 
+         location ~ \.php$ { 
+         root                   /software/bodog/1669.com; 
+         fastcgi_pass    127.0.0.1:9000; 
+         fastcgi_index   index.php; 
+         fastcgi_param   SCRIPT_FILENAME $document_root$fastcgi_script_name; 
+         include             fastcgi_params; 
+         }         
+ } 
+ 
+六、实现输入：https://www.cdnten.com?ID=703717&type=xhtd 自动跳转到：https://111xinhao.com:8888/Reqister?a=$arg_ID--注$arg_ID=703717保留ID 
+  
+ server { 
+         listen          80 ; 
+         listen          443 ssl; 
+         server_name  cdnten.com www.cdnten.com haosoucdn.com www.haosoucdn.com; 
+         charset      utf-8; 
+         index          index.html; 
+         #root         /software/bwin/bwin688.com; 
+         #if ($scheme = https ) { 
+         #return 301 http://$host$request_uri; 
+         #} 
+        
+       if ($arg_type = 'xhtd' ){ 
+         return 301 http://111xinhao.com:8888/Reqister?a=$arg_ID; } 
+         if ($arg_type = 'ysb' ){ 
+         return 301 http://ysb69.com:8888/Reqister?a=$arg_ID; }  
+  
+         # Load configuration files for the default server block. 
+         include /etc/nginx/default.d/*.conf; 
+  
+         location / { 
+         } 
+         location ~ \.php$ { 
+         #root                 /software/bwin/bwin688.com; 
+         fastcgi_pass    127.0.0.1:9000; 
+         fastcgi_index   index.php; 
+         fastcgi_param   SCRIPT_FILENAME $document_root$fastcgi_script_name; 
+         include              fastcgi_params; 
+         }         
+ } 
+  
+  
+  
+  
+
+
+
+HTML实现5秒自动跳转： 
+ 
+ 
+<html> 
+ 
+<head> 
+<meta http-equiv="Content-Language" content="zh-cn"> 
+<meta http-equiv="Content-Type" content="text/html; charset=gb2312"> 
+<title>请点击继续访问</title> 
+</head> 
+ 
+<body> 
+ 
+<p align="center"> </p > 
+<p align="center"> </p > 
+<p align="center"> 
+<br> 
+<meta http-equiv=refresh content="5;url=http://www.365k.com">            -----实现5秒自动跳转 
+<br> 
+<font face="楷体"><span style="text-decoration: none"> 
+<font color="#800000" size="8"> 
+<a href=" " style="font-weight: 700"> 
+请点击继续访问</a ></font></span></font></p > 
+<p align="center">  
+ 
+</p ></body> 
+ 
+
+
+
+</html>
+

@@ -1,0 +1,217 @@
+
+如何防止别人暴力破解你的密码！
+Fail2ban阻止暴力破解
+简介：Fail2ban能够监控系统日志，匹配日志中的错误信息（使用正则表达式），执行相应的屏蔽动作（支持多种，一般为调用 iptables ），是一款很实用、强大的软件。如：攻击者不断尝试穷举SSH、SMTP 、FTP 密码等，只要达到预设值，fail2ban 就会调用防火墙屏蔽此 IP ，并且可以发送邮件通知系统管理员。功能、特性：1、支持大量服务：sshd 、apache 、qmail 等2、支持多作动作：iptables 、tcp-wrapper 、shorewall 、mail notifications 等3、logpath 选项中支持通配符4、需要 Gamin 支持（Gamin 用于监控文件和目录是否更改）5、如果需要邮件通知，则系统事先要确保能够正常发送邮件
+1、fail2ban 安装
+ yum install -y epel-release
+ yum install -y fail2ban
+2、fail2ban 结构/etc/fail2ban                  ## fail2ban服务配置目录/etc/fail2ban/action.d     ## iptables、mail 等动作文件目录/etc/fail2ban/filter.d       ##条件匹配文件目录，过滤日志关键内容/etc/fail2ban/jail.conf     ## fail2ban防护配置文件/etc/fail2ban/fail2ban.conf   ## fail2ban配置文件，定义日志级别、日志、sock 文件位置等
+3、fail2ban.conf 配置
+
+shell > grep -v ^# /etc/fail2ban/fail2ban.conf
+[Definition]
+loglevel = 3 ##定义日志级别，默认
+logtarget = /var/log/fail2ban.log ##定义 fail2ban 日志文件
+socket = /var/run/fail2ban/fail2ban.sock ## sock文件存放位置，默认
+pidfile = /var/run/fail2ban/fail2ban.pid ## pid文件存放位置，默认
+
+4、jail.conf 防护配置
+shell > grep -v ^# /etc/fail2ban/jail.conf
+
+[DEFAULT] ##全局设置，优先级最小
+ignoreip = 127.0.0.1/8 ##不受限制的 IP ，多组用空格分割
+bantime = 600 ##非法 IP 被屏蔽时间（秒），-1 代表永远封锁
+findtime = 600 ##设置多长时间（秒）内超过 maxretry 限制次数即被封锁
+maxretry = 3 ##最大尝试次数
+backend = auto ##日志修改检测机制（gamin 、polling 、auto 三种）
+usedns = warn
+
+[ssh-iptables] ##分类设置（基于 SSHD 服务的防护） 需写到[sshd] 组末尾
+enabled = true ##是否开启防护，false 为关闭
+filter = sshd ##过滤规则 filter 名称，对应 filter.d 目录下的 sshd.conf
+action = iptables[name=SSH, port=ssh, protocol=tcp] ##动作参数
+
+sendmail-whois[name=SSH, dest=you@example.com, sender=fail2ban@example.com, sendername="Fail2Ban"] ##邮件通知参数 ##收件人地址           ## 发件人地址
+logpath = /var/log/secure ##检测系统登陆日志文件
+
+maxretry = 5 ##最大尝试次数
+##默认此配置文件中还有大量的服务防护配置，只不过默认都是关闭（false）状态，不用理会。
+
+5、fail2ban 启动、测试 SSHD 防护
+shell > service fail2ban start ##如果重启 iptables ，必须重启 fail2ban
+
+shell > fail2ban-client status ##可以看到有一个实例已经开始监控
+Status
+|- Number of jail: 1
+`- Jail list: ssh-iptables
+shell > iptables -nL ## iptables也加入了一条规则
+
+fail2ban-SSH tcp -- 0.0.0.0/0 0.0.0.0/0 tcp dpt:22##这时客户端尝试登陆本机，故意输入五次密码，就会看到如下日志
+
+shell > tail -1 /var/log/fail2ban.log
+2015-06-05 17:39:19,647 fail2ban.actions[1313]: WARNING [ssh-iptables] Ban 192.168.214.1      ##可以看到：192.168.214.1 被 Ban 掉了。
+
+shell > cat /var/log/secure ##系统登陆日志
+
+Jun 5 17:39:01 localhost sshd[1341]: Failed password for root from 192.168.214.1 port 2444 ssh2Jun 5 17:39:06 localhost sshd[1341]: Failed password for root from 192.168.214.1 port 2444 ssh2Jun 5 17:39:11 localhost sshd[1341]: Failed password for root from 192.168.214.1 port 2444 ssh2Jun 5 17:39:14 localhost sshd[1341]: Failed password for root from 192.168.214.1 port 2444 ssh2Jun 5 17:39:18 localhost sshd[1341]: Failed password for root from 192.168.214.1 port 2444 ssh2Jun 5 17:41:39 localhost login: 
+pam_unix(login:session): session opened for user root by LOGIN(uid=0)
+
+6、加入 Nginx 防护（ httpd 代替 ）##目的是把规定时间内达到限定访问次数的 IP 封锁（例如，一分钟内有几百次请求）
+shell > vim /etc/fail2ban/jail.conf
+
+[nginx]   ## nginx防护
+enabled = true
+filter = nginx  ##访问规则定义文件，位置在 /etc/fail2ban/filter.d/nginx.conf
+action = iptables[name=nginx, port=http, protocol=tcp]
+sendmail-whois[name=nginx,dest=1355*******@139.com,sender=fail2ban@aoath.com, 
+sendername="Fail2Ban"]
+logpath = /var/log/nginx/access_log ## nginx访问日志
+bantime = 86400 ##符合规则的屏蔽一天，如果参数值与全局有冲突，优先级大于全局配置
+findtime = 600  ## 10分钟内访问超过 maxretry 次数的封锁 IP
+maxretry = 1000 ##最大尝试次数
+
+在etc/fail2ban/filter.d目录下新增nginx.conf文件并追加以下内容：
+
+shell > vim /etc/fail2ban/filter.d/nginx.conf
+ [Definition]
+failregex = <HOST> -.*- .*HTTP/1.* 404 .*$
+ignoreregex =
+--------------------- 
+
+shell > vim /etc/fail2ban/filter.d/nginx.conf
+[Definition]
+failregex =.*-.*-.*$ ## 表示访问 IP ，其余的其实是最简单匹配了。因为这里没有要匹配精确的 URL ，只是限制访问次数
+ignoreregex =
+shell > fail2ban-regex /var/log/nginx/access_log /etc/fail2ban/filter.d/nginx.conf ##可以测试条件规则是否可用
+重启失败就手动创建access_log文件
+touch  /var/log/nginx/access_log
+shell > service fail2ban restart ##重启服务
+shell > fail2ban-client status ##可以看到有两个实例在监控中
+Status
+|- Number of jail: 2
+`- Jail list: nginx, ssh-iptables
+##开始测试，通过脚本或者不管刷新页面测试 Nginx 防护（ 便于测试，可以将 maxretry 的值调为 10 ）
+shell > fail2ban-client status nginx ##可以看到被 Ban 掉的 IP
+Status for the jail: nginx
+|- filter
+| |- File list: /var/log/httpd/access_log
+| |- Currently failed: 1
+| `- Total failed: 39`
+- action
+|- Currently banned: 1
+| `- IP list: 192.168.214.1
+`- Total banned: 1
+
+7、需要安装python,iptables,tcp-wrapper,shorewall,Gamin。如果想要发邮件，那必需安装postfix或sendmail
+
+
+Linux下使用extundelete实现文件/文件夹数据恢复注意事项
+恢复文件的时候一定要卸载磁盘分区
+1.首先关闭防火墙和SELINUX
+
+2.在虚拟机上创建一个2G的磁盘
+# fdisk /dev/sdb
+n+p+1+回车+回车+w
+4.使分区无需重启就能生效
+# partx -a /dev/sdb
+5.格式化为ext4分区并挂载
+# mkfs.ext4 /dev/sdb1
+# mkdir /data
+# mount /dev/sdb1 /data
+注: 在实际线上恢复过程中，切勿将extundelete安装到你误删的文件所在硬盘，这样会有一定几率将需要恢复的数据彻底覆盖。
+建议加装一块硬盘将extundelete安装到此硬盘，再做以下操作。
+二.extundelete安装
+2.下载并安装extundelete
+# wget http://nchc.dl.sourceforge.net/project/extundelete/extundelete/0.2.4/extundelete-0.2.4.tar.bz2
+# tar -jxvf extundelete-0.2.4.tar.bz2
+# cd extundelete-0.2.4
+# ./configure --prefix=/usr/local/extundelete
+# make && make install
+3.验证是否安装成功
+# cd /usr/local/extundelete/bin
+# ./extundelete -v
+
+
+4.设置环境变量
+# echo "PATH=/usr/local/extundelete/bin:$PATH" >> /etc/profile
+# echo "export PATH" >> /etc/profile
+# source /etc/profile
+
+
+
+5.上传一些图片，安装包等文件到/data目录
+
+# cd /data
+# yum install lrzsz -y
+# rz
+-------------
+本地文件.....
+-------------
+# ls
+lost+found  mysql-5.6.10.tar.gz  nginx.conf  pic.jpg
+------------------
+
+6.全部删除
+# rm -rf *
+
+7.查看被删除文件
+1).查看前需卸载该磁盘分区
+# cd ~
+# umount /dev/sdb1
+2).查看文件注:一般一个分区挂载到一个目录下时，这个”根”目录的inode值为2我们为了查看根目录所有文件，所以查看分区inode为2的这个部分# extundelete /dev/sdb1 --inode 2--------------------------------.....
+
+File name                                       | Inode number | Deleted status.
+                                                 2
+..                                                2
+lost+found                                        11             Deleted
+mysql-5.6.10.tar.gz                               12             Deleted
+nginx.conf                                        13             Deleted
+pic.jpg                                           14             Deleted
+--------------------------------
+注:标记为”Deleted”的文件则是被删除的文件
+
+8.恢复指定的文件
+注: 默认被删文件会恢复到当前目录下的RECOVERED_FILES目录中去
+# extundelete --restore-file pic.jpg /dev/sdb1  
+# cd RECOVERED_FILES/
+
+# ll
+----------------
+-rw-r--r-- 1 root root 52592 8月  13 07:18 pic.jpg
+----------------
+9.完全恢复设备上文件
+# extundelete --restore-all /dev/sdb1
+# ll
+-----------------------------------
+总用量34464
+-rw-r--r-- 1 root root 35174149 8月  13 07:24 mysql-5.6.10.tar.gz
+-rw-r--r-- 1 root root     4551 8月  13 07:24 nginx.conf
+-rw-r--r-- 1 root root    52592 8月  13 07:18 pic.jpg
+-rw-r--r-- 1 root root    52592 8月  13 07:24 pic.jpg.v1
+-----------------------------------
+注:这里完全恢复并不会把之前恢复的pic.jpg文件覆盖掉，而是重命名为pic.jpg.v1
+
+10.恢复指定的时间点后被删文件
+1).指定一个时间点
+# date -d "Sep 4 03:09:13 2013" +%s
+------------------
+1378235353
+------------------
+2).恢复这个时间点后的文件
+# extundelete --restore-all --after “1378235353” /dev/sdb1
+注:如果要恢之前的就用before参数。extundelete命令与after结合使用，在进行恢复时非常有用，可以过滤掉那太旧的文件，减小恢复压力。
+
+11.检验是否恢复成功
+# md5sum RECOVERED_FILES/mysql-5.6.10.tar.gz
+------------------------------------
+9dcee911fb4bc7e977a6b63f4d3ffa63  RECOVERED_FILES/mysql-5.6.10.tar.gz
+
+上传刚才误删的mysql安装包
+# rz
+# md5sum mysql-5.6.10.tar.gz
+9dcee911fb4bc7e977a6b63f4d3ffa63  mysql-5.6.10.tar.gz
+
+---------------------------------
+MD5值相同，恢复成功。。。
+
+

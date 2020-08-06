@@ -1,0 +1,371 @@
+﻿
+wget https://www.rdoproject.org/repos/rdo-release.rpm
+rpm -ivh https://www.rdoproject.org/repos/rdo-release.rpm
+
+yum install openstack-packstack -y
+packstack --allinone
+
+=========================
+云计算
+
+云计算是一种按使用量付费的模式，这种模式提供可用的、便捷的、按需的网络访问， 进入可配置的计算资源共享池（资源包括网络，服务器，存储，应用软件，服务），这些资源能够被快速提供，只需投入很少的管理工作，或与服务供应商进行很少的交互。
+
+
+
+可以理解为:把任何IT资源（包括网络，服务器硬件，存储，开发平台，应用软件，服务等）整合到一起，为用户提供按需分配。象自来水，电这种资源一样，用多少付多少钱。但这里面包括了大量的运算（比如用多少资源，如何分配指定的资源，如何计费等）
+
+
+--重点关键词:资源整合（资源高效利用)，弹性按需分配（计费)
+
+
+一个刚成立的公司，需要做简单的网站或其它基本服务，从以前到现在的选择有
+
+0, 自建机房
+1，服务器拖管
+2，服务器租用
+3，虚拟主机  		--一般来说只能用于web	
+2，VPS(virtual private server)	   --把物理服务器虚拟化成多个虚拟机，租给用户使用	
+5，云主机    		--相当于在VPS的基础上做了加强，如：随时在线修改资源
+
+
+N台物理机（宿主机）
+
+
+
+
+Iaas	infrastructure as a service,基础架构即服务(给客户提供基础架构，以虚拟化技术为基础）;上面的云主机就属于这一种。这一类的用户一般为系统管理员。
+Paas	platform as a service ,平台即服务（用户是看不到虚拟机的，虚拟的是类似开发库，开发接口，开发工具；能自动开发，调试及安装应用程序)；简单来说，就是把开发框架，开发架构做成云资源。这一类的用户一般为开发人员。
+Saas	software as a service,软件即服务 （提供给一个如浏览器的客户端，就可以做文本编辑，玩游戏，搭建你的服务）;这一类的用户一般为普通用户。
+
+
+iaas　 之　虚拟机    主机 
+paas  之　lnmp       平台  各种服务 
+saas  之　vsftp        APP 单个服务
+
+
+
+公有云	
+私有云
+混合云
+
+
+
+
+openstack（python语言开发)就是iaas的一种，可以理解成一种虚拟化管理工具（如果公司有强大的二次开发能力，可以开发出不同的自动化管理工具)
+apache基金会也有cloudstack
+还有一些如:eucalyptus,opennebula,nimbus,openQRM等
+
+
+
+redhat有两种:
+iaas:openstack
+paas:openshift
+
+
+红帽的云计算平台，可以免费申请使用（也有付费空间）
+https://www.openshift.com/
+
+
+
+http://www.openstack.org/
+http://docs.openstack.org/ 
+https://www.openstack.org/passport/
+
+版本发展（差不多半年就发布一次）
+A
+B
+C
+D
+E
+F
+Grizzy
+Havana
+Icehouse
+juno
+kilo
+liberty
+Mitaka
+Newton
+Ocata
+Pike
+Queens
+
+
+
+openstack公网源的rpm包路径 https://www.rdoproject.org/repos/rdo-release.rpm
+
+https://repos.fedorapeople.org/repos/openstack/
+
+mitaka版中文安装文档
+https://docs.openstack.org/mitaka/zh_CN/install-guide-rdo/
+
+==================================================================================================
+
+
+
+kvm准备一台centos7.3  （硬盘最好50G或以上，如果进行基本安装内存最好6G或以上)
+
+
+
+
+准备工作:
+
+0,使用Server.example.com虚拟机。删除物理桥接网卡
+
+1,ip静态(关闭NetworkManager)，并且要能上公网
+
+# systemctl stop NetworkManager
+# systemctl disable NetworkManager
+
+
+2,主机名配置和绑定
+# hostnamectl set-hostname --static openstack.cluster.com
+
+# vi  /etc/hosts
+192.168.224.10	openstack.cluster.com		--主机名和ip地址一定要对应正确
+
+3,时间同步
+# yum install ntp
+# systemctl restart ntpd
+# systemctl enable ntpd
+
+4,关闭防火墙,selinux
+
+# systemctl stop firewalld
+# systemctl disable firewalld
+
+# vi /etc/selinux/config
+SELINUX=disabled
+
+# reboot
+
+5,配置yum
+# wget https://www.rdoproject.org/repos/rdo-release.rpm
+# rpm -ivh https://www.rdoproject.org/repos/rdo-release.rpm
+
+6. 重新安装libreoffice-math
+# yum remove libvirt-client -y
+# yum remove gnome-software -y
+# yum install libreoffice-math -y
+gnome-software
+准备完成，建议重启系统在这里做一个虚拟机快照
+============================================================================================================
+
+
+第一步:安装openstack-packstack包
+# yum upgrade   -y   #y更新linux
+# yum install openstack-packstack -y
+
+第二步:开始openstack(单节点rdo)安装
+# packstack --allinone
+开始一键安装，但是很可能会出现各种错误，可以通过报错或者把报错贴到网上查看解决方法，
+
+最后报如下的信息就表示安装成功了
+ **** Installation completed successfully ******
+
+Additional information:
+ * A new answerfile was created in: /root/packstack-answers-20180312-115305.txt
+ * Time synchronization installation was skipped. Please note that unsynchronized time on server instances might be problem for some OpenStack components.
+ * File /root/keystonerc_admin has been created on OpenStack client host 192.168.1.8. To use the command line tools you need to source the file.
+ * To access the OpenStack Dashboard browse to http://192.168.1.8/dashboard .
+Please, find your login credentials stored in the keystonerc_admin in your home directory.
+ * The installation log file is available at: /var/tmp/packstack/20180312-115303-i4Z7ak/openstack-setup.log
+ * The generated manifests are available at: /var/tmp/packstack/20180312-115303-i4Z7ak/manifests
+
+安装完成后，建议在这里做一个虚拟机快照
+
+=====================================================================================
+
+
+寻找控制台登陆密码：
+[root@openstack ~]# cat /root/keystonerc_admin
+unset OS_SERVICE_TOKEN
+export OS_USERNAME=admin		--图形登陆界面的用户名admin
+export OS_PASSWORD=143acf3c84084b1a	--图形登陆界面的admin用户密码
+export OS_AUTH_URL=http://192.168.1.8:5000/v2.0
+export PS1='[\u@\h \W(keystone_admin)]\$ '
+
+export OS_TENANT_NAME=admin
+export OS_REGION_NAME=RegionOne
+
+
+登陆Openstack控制台：
+http://192.168.224.10/dashboard
+用户名:admin
+密码:对应在上面的keystonerc_admin去找
+
+修改中文：
+右上角admin->setting里可以修改成中文
+
+
+
+
+
+
+==================================================================
+
+
+项目－》计算－》镜像    里面有一个10几M大小的镜像叫cirros，是用于测试的一个小镜像
+
+
+项目－》计算－》实例 －》创建实例
+
+实例名称:instance01
+实例镜像源:cirror
+实例类型:m1.small
+
+
+这里当前版本有一个bug，创建实例时，如果报下面的错误;
+# host 'openstack.cluster.com' no mapper to cell
+
+解决方法:升级版本或降级版本
+
+另一个解决方法:
+
+[root@openstatck ~]# source /root/keystonerc_admin 
+[root@openstatck ~(keystone_admin)]# nova-manage cell_v2 simple_cell_setup
+
+
+解决后，重新创建实例，创建成功后，不能ping它，不能ssh它，也不能使用virsh console连接它。但是可以在实例后面的操作指令列表里选择"控制台"来进行图形化操作（如果很卡,很难操作成功)
+
+
+==============================================================================================================
+
+
+下面使用命令来启动一个实例(云主机)
+
+
+第一步:创建一个自定义的类型
+[root@openstack ~]# source /root/keystonerc_admin		--使用此用户登录进行操作
+[root@openstack ~(keystone_admin)]# openstack flavor create --id 0 --vcpus 2 --ram 512 --disk 10 m1.nano		--创建一个实例类型（定义cpu核数为1,内存大小为512M,磁盘大小为1G);使用openstack flavor delete m1.nano命令删除
+
+
+
+# openstack flavor list
++----+-----------+-------+------+-----------+-------+-----------+
+| ID | Name      |   RAM | Disk | Ephemeral | VCPUs | Is Public |
++----+-----------+-------+------+-----------+-------+-----------+
+| 0  | m1.nano   |  1024 |   10 |         0 |     2 | True      |
+| 1  | m1.tiny   |   512 |    1 |         0 |     1 | True      |
+| 2  | m1.small  |  2048 |   20 |         0 |     1 | True      |
+| 3  | m1.medium |  4096 |   40 |         0 |     2 | True      |
+| 4  | m1.large  |  8192 |   80 |         0 |     4 | True      |
+| 5  | m1.xlarge | 16384 |  160 |         0 |     8 | True      |
++----+-----------+-------+------+-----------+-------+-----------+
+
+
+第二步:创建ssh登录的空密码密钥
+# ssh-keygen -q -N ""		
+Enter file in which to save the key (/root/.ssh/id_rsa): 
+
+
+# openstack keypair create --public-key ~/.ssh/id_rsa.pub keypair1    --删除命令为openstack keypair delete keypair1
+
+# openstack keypair list
++----------+-------------------------------------------------+
+| Name     | Fingerprint                                     |
++----------+-------------------------------------------------+
+| keypair1 | f8:33:06:04:af:bf:85:13:08:35:8d:3f:04:8a:f2:8a |
++----------+-------------------------------------------------+
+
+
+第三步:默认情况下，创建的云主机，不允许ping，也不允许ssh，所以需要修改默认的安全组策略，加上允许ping和允许ssh
+# openstack security group list	  --先list，可能有多个叫default的
++--------------------------------------+---------+------------------------+---------+
+| ID                                   | Name    | Description            | Project |
++--------------------------------------+---------+------------------------+---------+
+| 6f5e3001-2fd2-472e-98a4-4635b8e2b2c0 | default | Default security group |         |
+| ccc8739b-fb6f-46f7-9702-2b88a4bdddcc | default | Default security group |         |
+| d4e1d499-40fa-44ca-9cfe-0ab8992ef34e | default | Default security group |         |
++--------------------------------------+---------+------------------------+---------+
+
+# openstack security group create newgroup	--我这里创建一个新的安全组，组名为newgroup
+# openstack security group rule create --proto icmp newgroup	--在newgroup安全里加了一条策略:允许icmp
+# openstack security group rule create --proto tcp --dst-port 22 newgroup	--在newgroup安全组里又加了一条策略:允许ssh
+
+
+
+# openstack security group list		--查看安全组
++--------------------------------------+----------+------------------------+---------+
+| ID                                   | Name     | Description            | Project |
++--------------------------------------+----------+------------------------+---------+
+| 00a9bea2-14dd-4b01-8424-2ccfaeaec060 | default  | Default security group |         |
+| 9f490a14-fa60-469e-8a56-4afd06e5bd2b | default  | Default security group |         |
+| bf3d880c-5ecc-4bfc-bb84-29c8ecbad22c | default  | Default security group |         |
+| e6e0d8d5-74ab-4891-9dec-c2b9019fee53 | newgroup | newgroup               |         |
+| eced313d-c623-4156-a510-08a5af950e87 | default  | Default security group |         |
++--------------------------------------+----------+------------------------+---------+
+
+
+# openstack security group rule list newgroup	--查看newgroup安全组里的策略信息
++--------------------------------------+-------------+-----------+------------+-----------------------+
+| ID                                   | IP Protocol | IP Range  | Port Range | Remote Security Group |
++--------------------------------------+-------------+-----------+------------+-----------------------+
+| 7886e6e4-a0cd-4453-8dd6-862702d85177 | None        | None      |            | None                  |
+| a0b3f9a6-37b7-4f8b-9ff4-ba4ca20d68d5 | icmp        | 0.0.0.0/0 |            | None                  |
+| a6ac6c40-402c-49fc-8a3d-c9040df7f8a6 | tcp         | 0.0.0.0/0 | 22:22      | None                  |
+| fc1cc957-74cb-4ce5-8be9-33bc27b44a6d | None        | None      |            | None                  |
++--------------------------------------+-------------+-----------+------------+-----------------------+
+
+
+
+
+第四步:创建镜像(可选)
+
+测试镜像：Fedora-Cloud-Base-28-1.1.x86_64.qcow2 （如果要运行此镜像，需要16G以上内存）
+
+将其拷到openstack服务器上，比如放到/root/目录，则可以使用下面的命令创建新的image
+
+# openstack image create fedora22 --disk-format qcow2 --file /root/Fedora-Cloud-Base-28-1.1.x86_64.qcow2
+
+
+
+# openstack image list
++--------------------------------------+----------+--------+
+| ID                                   | Name     | Status |
++--------------------------------------+----------+--------+
+| f9c5e3e4-25df-4c4e-b9e8-d4936a5d9d5f | cirros   | active |
+| 2632de0b-184d-45d6-adcf-d7eb9e737d47 | fedora22 | active |
++--------------------------------------+----------+--------+
+
+
+
+第五步:创建云主机实例
+下面创建一个云主机实例(名称为instance01;类型为m1.nano;镜像为cirros;安全组为default;密钥对为keypair1)
+# openstack server create --flavor m1.nano --image fedora22  --security-group newgroup --key-name keypair1 instance01	
+
+
+# openstack server list		--查看刚创建的实例(确认状态为ACTIVE则表示创建完成了)
++--------------------------------------+------------+--------+--------------------+------------+
+| ID                                   | Name       | Status | Networks           | Image Name |
++--------------------------------------+------------+--------+--------------------+------------+
+| 6c610831-b1ed-42ff-8fa8-e50d341d4906 | instance01 | ACTIVE | public=172.24.4.12 | fedora22   |
++--------------------------------------+------------+--------+--------------------+------------+
+
+
+
+# ssh -i keypair1.pem fedora@172.24.4.12
+
+
+===========================================
+手动添加虚拟内存：
+
+为虚拟机增加一个磁盘
+
+在Linux中找到新增加的磁盘
+# ls /dev/sdb
+
+格式化新硬盘，将整个硬盘作为一个分区
+# fdisk /dev/sdb
+输入n，创建新分区。
+输入t，选择代码82
+输入w，保存分区修改结果
+
+将sdb1分区作为交换分区
+# mkswap /dev/sdb1
+
+启动交换分区
+# swapon /dev/sdb1
+
+确认交换分区生效
+# free -g

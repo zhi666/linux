@@ -1,0 +1,498 @@
+-- 
+ 
+容器技术 
+lxc 
+ 
+docker 
+概念: 
+
+images     镜像 
+container  容器 
+ 
+ 
+宿主机或虚拟机上操作，我这里使用宿主机 
+ 
+准备: 
+需要 centos163 源 
+时间同步 
+需要能访问公网 
+关闭 iptables,selinux,firewalld 
+ 
+
+
+安装与启动 
+第一步:docker 安装与启动，并测试运行 ok 
+# yum install docker -y
+# vim /etc/sysconfig/docker
+	修改配置参数： "--selinux-enabled" 为 "--selinux-enabled=false"
+# systemctl start docker 
+# systemctl status docker 
+# systemctl enable docker 
+ 
+# docker version 
+# docker info 
+ 
+# docker run hello-world    --运行 hello-world 这个 images，如果本地没有，则会从
+docker hub 去下载; 
+Unable to find image 'hello-world:latest' locally 
+Trying to pull repository docker.io/library/hello-world ...  
+latest: Pulling from docker.io/library/hello-world 
+b04784fba78d: Pull complete  
+Digest: 
+sha256:f3b3b28a45160805bb16542c9531888519430e9e6d6ffc09d72261b0d26ff74f 
+ 
+Hello from Docker! 
+This message shows that your installation appears to be working correctly. 
+
+To generate this message, Docker took the following steps: 
+ 1. The Docker client contacted the Docker daemon. 
+ 2. The Docker daemon pulled the "hello-world" image from the Docker Hub. 
+ 3. The Docker daemon created a new container from that image which runs the executable that produces the output you are currently reading. 
+ 4. The Docker daemon streamed that output to the Docker client, which sent it to your terminal. 
+ 
+To try something more ambitious, you can run an Ubuntu container with: 
+ $ docker run -it ubuntu bash 
+ 
+Share images, automate workflows, and more with a free Docker ID: 
+ https://cloud.docker.com/ 
+ 
+For more examples and ideas, visit: 
+ https://docs.docker.com/engine/userguide/ 
+ 
+=====================
+
+# docker images   --列表本地的 images;使用 man docker-images 得到参数说明 
+REPOSITORY              TAG                 IMAGE ID            CREATED             
+SIZE 
+docker.io/hello-world   latest              1815c82652c0        10 weeks ago        
+1.84 kB 
+ 
+
+# docker ps -a    --列表所有状态的 container;使用 man docker-ps 得到参数说明 
+CONTAINER ID        IMAGE               COMMAND             CREATED             
+STATUS                     PORTS               NAMES 
+689668841cc1        hello-world         "/hello"            7 minutes ago       
+Exited (0) 7 minutes ago                       nostalgic_lumiere 
+
+
+
+
+=========================================
+
+docker 基本使用
+
+第二步: 
+docker 基本使用 
+# docker search centos7.3   --通过 centos7.3 去 docker.io 上查找相关的 images;使用
+man docker-search 得到参数说明 
+
+
+# docker pull docker.io/erixero/centos7.3-base-image     --通过 pull 命令下载
+images,后面的就是 image 的名称(前提网速要好,此镜像大概 200 多 M);使用 man docker-pull
+得到参数说明 
+ 
+# docker images  
+REPOSITORY                               TAG                 IMAGE ID            
+CREATED             SIZE 
+docker.io/hello-world                    latest              1815c82652c0        
+10 weeks ago        1.84 kB 
+docker.io/erixero/centos7.3-base-image   latest              ae904afa83bb        
+4 months ago        288.3 MB 
+ 
+ 
+# docker run docker.io/erixero/centos7.3-base-image echo haha    
+haha 
+ 
+# docker run -i -t docker.io/erixero/centos7.3-base-image /bin/bash  --使用 man 
+docker-run 得到参数说明;使用 exit 或 ctrl+d 来退出 
+ 这里交互操作时，你可以在里面 touch 创建一个文件，退出后，再查看，会发现创建的文件没
+了(原因是你退出再登录，是又产生了一个新的 container) 
+
+ 
+ 
+# docker run -d docker.io/erixero/centos7.3-base-image /bin/sh -c "while true; 
+do echo haha;sleep 3;done"  (-d 表示后台运行 )
+21e27256af4ad3185e1632fae30b9e202f4cf2d1e6e7a01c68a82dd70e40487a 
+
+# docker ps -a      --可以查看到前面所有运行或退出状态的 container 
+CONTAINER ID        IMAGE                                    COMMAND                  
+CREATED             STATUS                      PORTS               NAMES 
+
+6d99ac6468f6        docker.io/erixero/centos7.3-base-image   "/bin/sh -c 
+'while tr"   2 minutes ago       Up 2 minutes                                    
+distracted_bose 
+088dc45a5319        docker.io/erixero/centos7.3-base-image   "/bin/bash"              
+5 minutes ago       Exited (0) 3 minutes ago                        
+happy_poitras 
+2df38e119f6a        docker.io/erixero/centos7.3-base-image   "/bin/bash"              
+7 minutes ago       Exited (0) 5 minutes ago                        
+grave_khorana 
+329e9e12d6ea        docker.io/erixero/centos7.3-base-image   "echo haha"              
+10 minutes ago      Exited (0) 10 minutes ago                       
+jolly_heyrovsky 
+689668841cc1        hello-world                              "/hello"                 
+31 minutes ago      Exited (0) 31 minutes ago                       
+nostalgic_lumiere 
+ 
+
+
+
+# docker logs e28478d4b604 --查看此 container id 的结果；id 可以换成名称;使用 man 
+docker-logs 得到参数说明 
+ 
+# docker stop e70b2b6f9b38  --停止此容器 
+ 
+# docker start e70b2b6f9b38   --启动继续运行 
+ 
+
+
+
+
+问题一: 
+前面我们交互连到 images 里，touch 的文件，退出再连就看不到了（因为退出再连又产生了一个
+新的容器），如何让 touch 的文件还能看到? 
+答案:要继续连接先前的容器 
+# docker run -i -t docker.io/erixero/centos7.3-base-image /bin/bash 
+bash-4.2# touch /1111111 
+bash-4.2# ls / 
+1111111  bin  boot  dev  etc  home  lib  lib64  media  mnt  opt  proc  root  
+run  sbin  srv  sys  tmp  usr  var 
+bash-4.2# exit 
+ 
+# docker ps -l (Find id of instance)   ps -l  查看上一次退出的容器ID
+CONTAINER ID        IMAGE                                    COMMAND             
+CREATED             STATUS                      PORTS               NAMES 
+
+fe2ff7a78f55        docker.io/erixero/centos7.3-base-image   "/bin/bash"         
+49 seconds ago      Exited (0) 19 seconds ago                       
+thirsty_meninsky 
+ 
+# docker attach fe2ff7a78f55    --使用 docker attach 可以连接上一个运行中的容器，
+停止状态的需要先 start; man docker-attach 查看更多使用参数说明 
+You cannot attach to a stopped container, start it first 
+ 
+# docker start fe2ff7a78f55 
+# docker attach fe2ff7a78f55    --连上去后，可以看到先前 touch 的 111111 这个文件 
+bash-4.2# ls / 
+1111111  bin  boot  dev  etc  home  lib  lib64  media  mnt  opt  proc  root  
+run  sbin  srv  sys  tmp  usr  var 
+bash-4.2#  
+ 
+ 
+问题二: 
+前面我们交互连到 images 里，touch 的文件，退出再连就看不到了，如何让 touch 的文件永久保
+存呢? 
+答案：可以修改并保存一个新的镜像 
+终端一: 
+# docker run -i -t docker.io/erixero/centos7.3-base-image /bin/bash 
+bash-4.2# ls / 
+bin  boot  dev  etc  home  lib  lib64  media  mnt  opt  proc  root  run  sbin  
+srv  sys  tmp  usr  var 
+bash-4.2# touch /11111111111111 
+bash-4.2# ls / 
+11111111111111  boot  etc   lib    media  opt   root  sbin  sys  usr 
+bin     dev   home  lib64  mnt    proc  run   srv   tmp  var 
+ 
+这时不要退出 
+换终端二操作: 
+# docker ps -l 
+CONTAINER ID        IMAGE                                    COMMAND             
+CREATED             STATUS              PORTS               NAMES 
+429adceb8b2b        docker.io/erixero/centos7.3-base-image   "/bin/bash"         
+25 seconds ago      Up 23 seconds                           stoic_morse 
+                       stoic_morse 
+                       
+# docker commit 429adceb8b2b my_touch1111111    --找到终端一操作的 container 
+id，然后 commit 提交一个新的 images 名(后面 my_touch1111111 就是我自定义新的 images
+名) 
+sha256:dd19bbad15e5ef186a60a4498c055e761cc38a83c9df6d278f870465961be9b4 
+ 
+# docker images     --再列表本地的 images，就能看到 my_touch1111111 这个 images 
+REPOSITORY                               TAG                 IMAGE ID            
+CREATED             SIZE 
+my_touch1111111                          latest              dd19bbad15e5        
+6 minutes ago       288.3 MB 
+docker.io/hello-world                    latest              1815c82652c0        
+10 weeks ago        1.84 kB 
+docker.io/erixero/centos7.3-base-image   latest              ae904afa83bb        
+4 months ago        288.3 MB 
+ 
+# docker run -i -t my_touch1111111 /bin/bash    --交互式登录到新创建的 images
+里，测试查看，确实有这个 touch 的 1111111 文件 
+bash-4.2# ls / 
+11111111111111  boot  etc   lib    media  opt   root  sbin  sys  usr 
+bin     dev   home  lib64  mnt    proc  run   srv   tmp  var 
+bash-4.2# quit 
+ 
+甚至可以把自己修改后保存的 image 上传到官网（需要账号)；(如果是用阿里的容器或网易的容
+器，它们有专门的上传操作界面) 
+# docker push my_touch1111111 
+ 
+ 
+扩展: 
+删除一个 container 
+#docker stop e28478d4b604 
+#docker rm  e28478d4b604 
+停止所有的 container 
+#docker stop $(docker ps -a -q)    （-q参数用于仅仅显示ID）
+
+如果想要删除所有 container 的话再加一个指令 
+#docker rm $(docker ps -a -q) 
+删除一个镜像（先要把此镜像相关的容器都删掉，才能再删除镜像) 
+#docker rmi 镜像名 
+ 
+ 
+============================================================================== 
+ 运行 httpd 
+上面介绍了基本的使用，但有一个问题，上面的 container 都并没有跑实际的应用，而生产环境
+容器就是要用来跑应用的；比如我们跑一个 httpd 试试 
+ 
+# docker run -i -t docker.io/erixero/centos7.3-base-image /bin/bash 
+bash-4.2# yum install httpd httpd-devel -y      --此镜像里没有 rpm 命令，但有
+yum，所以直接安装 httpd 相关软件包 
+bash-4.2#  --自定义安装一些你自
+己需要用到的命令，比如 vim,lsof,netstat,elinks 等 
+bash-4.2# echo "web" > /var/www/html/index.html    --建一个主页文件  
+bash-4.2# systemctl restart httpd       --这里不支持这样启动 
+Failed to get D-Bus connection: Operation not permitted 
+bash-4.2# /usr/sbin/httpd           --使用此命令启动 
+bash-4.2# lsof -i:80 
+COMMAND PID USER   FD   TYPE DEVICE SIZE/OFF NODE NAME 
+httpd   315 root    4u  IPv6  91811      0t0  TCP *:http (LISTEN) 
+bash-4.2# ifconfig eth0 |head -2 
+eth0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500 
+        inet 172.17.0.2  netmask 255.255.0.0  broadcast 0.0.0.0 
+bash-4.2# curl 172.17.0.2 
+   main page 
+bash-4.2# curl 127.0.0.1 
+   main page 
+bash-4.2# exit 
+exit 
+
+
+# docker ps -l 
+CONTAINER ID        IMAGE                                    COMMAND             
+CREATED             STATUS                      PORTS               NAMES 
+2339171d8a4f        docker.io/erixero/centos7.3-base-image   "/bin/bash"         
+21 minutes ago      Exited (0) 23 seconds ago                       
+adoring_shockley 
+ 
+# docker start 2339171d8a4f 
+ 
+# docker ps -l 
+CONTAINER ID        IMAGE                                    COMMAND             
+CREATED             STATUS              PORTS               NAMES 
+2339171d8a4f        docker.io/erixero/centos7.3-base-image   "/bin/bash"         
+21 minutes ago      Up 1 seconds                            adoring_shockley 
+ 
+============================================================================== 
+dockerfile 自定义容器 
+使用 dockerfile 自定义运行应用的容器 
+ 
+ 
+man dockerfile 
+ 
+1,FROM 
+FROM 指令用于指定其后构建新镜像所使用的基础镜像。FROM 指令必是 Dockerfile 文件中的首条
+命令； 
+FROM 指令指定的基础 image 可以是官方远程仓库中的，也可以位于本地仓库。 
+tag 或 digest 是可选的(类似版本号)，如果不使用这两个值时，会使用 latest 版本的基础镜像 
+ 
+FROM <image> 或 FROM <image>:<tag> 或 FROM <image>:<digest> 
+
+2,RUN 
+RUN 用于在镜像容器中执行命令，其有以下两种命令执行方式： 
+ 
+shell 执行 
+RUN <command> 
+在这种方式会在 shell 中执行命令，Linux 下默认使用/bin/sh -c 
+ 
+exec 执行 
+RUN ["executable", "param1", "param2"] 
+这种类似于函数调用。可将 executable 理解成为可执行文件，后面就是两个参数。 
+ 
+两种写法比对： 
+    RUN /bin/bash -c source $HOME/.bashrc; echo $HOME 
+    RUN ["/bin/bash", "-c", "echo hello"] 
+注意：多行命令不要写多个 RUN，原因是 Dockerfile 中每一个指令都会建立一层. 
+ 多少个 RUN 就构建了多少层镜像，会造成镜像的臃肿、多层，不仅仅增加了构件部署的时间，还
+容易出错。 
+RUN 书写时的换行符是\ 
+ 
+3，CMD 
+CMD 用于指定在容器启动时所要执行的命令。CMD 有以下三种格式：     
+CMD ["executable","param1","param2"] 
+CMD ["param1","param2"] 
+CMD command param1 param2 
+ 
+CMD 不同于 RUN，CMD 用于指定在容器启动时所要执行的命令，而 RUN 用于指定镜像构建时所要执
+行的命令。 
+ 
+4,EXPOSE 
+EXPOSE 用于指定容器在运行时监听的端口： 
+EXPOSE <port> [<port>...] 
+ 
+EXPOSE 并不会让容器的端口访问到主机。要使其可访问，需要在 docker run 运行容器时通过-p
+来发布这些端口，或通过-P 参数来发布 EXPOSE 导出的所有端口。 
+
+
+
+# 映射一个端口   
+EXPOSE port1   
+# 相应的运行容器使用的命令   
+docker run -p port1 image   
+       
+# 映射多个端口   
+EXPOSE port1 port2 port3   
+# 相应的运行容器使用的命令   
+docker run -p port1 -p port2 -p port3 image   
+# 还可以指定需要映射到宿主机器上的某个端口号   
+docker run -p host_port1:port1 -p host_port2:port2 -p host_port3:port3 image   
+ 
+端口映射是 docker 比较重要的一个功能，原因在于我们每次运行容器的时候容器的 IP 地址不能
+指定而是在桥接网卡的地址范围内随机生成的。 
+宿主机器的 IP 地址是固定的，我们可以将容器的端口的映射到宿主机器上的一个端口，免去每次
+访问容器中的某个服务时都要查看容器的 IP 的地址。 
+对于一个运行的容器，可以使用 docker port 加上容器中需要映射的端口和容器的 ID 来查看该
+端口号在宿主机器上的映射端口 
+ 
+5,ENV 
+功能为设置环境变量 
+语法有两种 
+ENV <key> <value> 
+ENV <key>=<value> ... 
+两者的区别就是第一种是一次设置一个，第二种是一次设置多个 
+ 
+设置了后，后续的 RUN 命令都可以使用，container 启动后，可以通过 docker inspect 查看这
+个环境变量，也可以通过在 docker run --env key=value 时设置或修改环境变量。 
+假如你安装了 JAVA 程序，需要设置 JAVA_HOME，那么可以在 Dockerfile 中这样写： 
+ENV JAVA_HOME /usr/local/jdkxxxx/ 
+ 
+6,ADD 
+一个复制命令，把文件复制到镜像中。 
+ 
+如果把虚拟机与容器想象成两台 linux 服务器的话，那么这个命令就类似于 scp，只是 scp 需要
+加用户名和密码的权限验证，而 ADD 不用。 
+语法如下： 
+1. ADD <src>... <dest> 
+2. ADD ["<src>",... "<dest>"] 
+<src>可以是一个本地文件或者是一个本地压缩文件，还可以是一个 url；如果把<src>写成一个
+url，那么 ADD 就类似于 wget 命令 
+<dest>路径的填写可以是容器内的绝对路径，也可以是相对于工作目录的相对路径 
+ 
+7,COPY 
+COPY 
+语法如下： 
+ 
+1. COPY <src>... <dest> 
+2. COPY ["<src>",... "<dest>"] 
+与 ADD 的区别: 
+COPY 的<src>只能是本地文件，其他用法一致 
+ 
+8,ENTRYPOINT 用于给容器配置一个可执行程序。也就是说，每次使用镜像创建容器时，通过
+ENTRYPOINT 指定的程序都会被设置为默认程序。ENTRYPOINT 有以下两种形式：   
+ENTRYPOINT ["executable", "param1", "param2"] 
+ENTRYPOINT command param1 param2 
+ 
+ENTRYPOINT 与 CMD 非常类似，不同的是通过 docker run 执行的命令不会覆盖 ENTRYPOINT 
+相同点： 
+只能写一条，如果写了多条，那么只有最后一条生效 
+容器启动时才运行，运行时机相同 
+ 
+不同点： 
+ENTRYPOINT 不会被运行的 command 覆盖，而 CMD 则会被覆盖 
+如果我们在 Dockerfile 同时写了 ENTRYPOINT 和 CMD，并且 CMD 指令不是一个完整的可执行命
+令，那么 CMD 指定的内容将会作为 ENTRYPOINT 的参数 
+如果我们在 Dockerfile 同时写了 ENTRYPOINT 和 CMD，并且 CMD 是一个完整的指令，那么它们两
+个会互相覆盖，谁在最后谁生效 
+ 
+9,VOLUME 
+VOLUME ["<mountpoint>"] 
+
+VOLUME  容器使用的是 AUFS，这种文件系统不能持久化数据，当容器关闭后，所有的更改都会丢
+失。 
+当容器中的应用有持久化数据的需求时可以在 Dockerfile 中使用该指令。 
+该目录可以被容器本身使用，也可以共享给其他容器使用。 
+ 
+10,USER 
+设置启动容器的用户(像 hadoop 需要 hadoop 用户操作，oracle 需要 oracle 用户操作),可以是
+用户名或 UID 
+USER daemo 
+USER UID 
+注意：如果设置了容器以 daemon 用户去运行，那么 RUN,CMD 和 ENTRYPOINT 都会以这个用户去
+运行 
+镜像构建完成后，通过 docker run 运行容器时，可以通过-u 参数来覆盖所指定的用户 
+ 
+11,WORKDIR 
+设置工作目录指令，可以多次切换(相当于 cd 命令)，对 RUN,CMD,ENTRYPOINT 生效 
+ 
+ 
+其他的可以 man dockfile 查看 
+# mkdir /test 
+# cd /test 
+# cat dockerfile 
+ 
+FROM     docker.io/erixero/centos7.3-base-image 
+ 
+MAINTAINER daniel 
+ 
+RUN rpm --rebuilddb && yum install httpd -y
+RUN echo "container main page" > /var/www/html/index.html 
+ 
+EXPOSE  80 
+CMD ["/usr/sbin/httpd","-D","FOREGROUND"] 
+
+----------------
+
+如果网络有问题造成公网 yum 源访问不了，那么就自已建立访问宿主机的 yum 仓库
+(172.17.0.1 为容器访问宿主机的 ip) 
+FROM docker.io/erixero/centos7.3-base-image 
+ 
+MAINTAINER daniel 
+ 
+RUN rm /etc/yum.repos.d/* -rf 
+/**/ 
+RUN echo -e 
+"[base]\nname=base\nbaseurl=http://172.17.0.1/centos163\nenabled=1\ngpgcheck=0
+" > /etc/yum.repos.d/local163.repo 
+RUN yum clean all 
+RUN yum install httpd httpd-devel systemd lsof net-tools -y 
+RUN echo "container main page" > /var/www/html/index.html 
+ 
+EXPOSE  80 
+CMD ["/usr/sbin/httpd","-D","FOREGROUND"] 
+ 
+ ------------------
+ 
+# docker build -f dockerfile -t my_httpd:0.1 . (include dot )  --开始 build，它会分步骤一步接一
+步；如果错了，修改 dockerfile 后继续使用此命令执行，已经成功的步骤会有缓存;最后这个点
+表示 dockerfile 的路径 
+ 
+# docker images |grep my_httpd 
+my_httpd                                0.1                 88cbfb7815ed        
+9 minutes ago       491.6 MB 
+ 
+# docker run -d -p 8000:80 my_httpd:0.1  
+184e6440355b7052fcf3636046bf3207b1413cb13edbb6feee1e8e4cfd6a296d 
+ 
+# lsof -i:8000 
+COMMAND     PID USER   FD   TYPE DEVICE SIZE/OFF NODE NAME 
+docker-pr 15165 root    4u  IPv6 185972      0t0  TCP *:irdmi (LISTEN) 
+
+# docker ps -a |grep my_httpd 
+00622a3967f4        my_httpd:0.1        "/usr/sbin/httpd -D F"   3 minutes ago       
+Up 3 minutes                0.0.0.0:8000->80/tcp   berserk_mclean 
+
+
+# curl 127.0.0.1:8000
+container main page
+最后用浏览器访问 宿主机 ip:8000 验证 
+ 
+
+
+
+
+
+
+
+
